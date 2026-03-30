@@ -1,0 +1,72 @@
+/* app/globals.css */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Fundos */
+  --bg-base:      #f0f2f5;
+  --bg-surface:   #ffffff;
+  --bg-elevated:  #f7f8fa;
+  --bg-hover:     #eef0f4;
+  --bg-active:    #e8eaf0;
+
+  /* Bordas */
+  --border:       #e2e5ea;
+  --border-light: #eaecf0;
+
+  /* Texto */
+  --text-primary:   #1a1d23;
+  --text-secondary: #4b5263;
+  --text-muted:     #8b92a0;
+  --text-disabled:  #c2c8d4;
+
+  /* Cores semânticas */
+  --green:  #16a34a;
+  --blue:   #2563eb;
+  --purple: #7c3aed;
+  --amber:  #d97706;
+  --red:    #dc2626;
+  --teal:   #0d9488;
+
+  /* Sidebar */
+  --sidebar-w: 220px;
+
+  /* Fonte mono */
+  --mono: "ui-monospace", "Cascadia Code", "Fira Code", monospace;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-disabled); }
+
+/* Inputs e selects globais */
+input, textarea, select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--blue); }
+
+/* Botão base */
+button { font-family: inherit; cursor: pointer; transition: opacity 0.15s, background 0.15s; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Pre / code */
+pre, code { font-family: var(--mono); }

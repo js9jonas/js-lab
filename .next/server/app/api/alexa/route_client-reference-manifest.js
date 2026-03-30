@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/alexa/route"]={"moduleLoading":{"prefix":"/_next/","crossOrigin":null},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/home/jonas/js-lab/":[],"/home/jonas/js-lab/app/api/alexa/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}}
