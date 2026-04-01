@@ -132,7 +132,7 @@ function WebhookSection({ instanceName }: { instanceName: string }) {
     if (!config) return
     setSaving(true); setError(""); setSaved(false)
     try {
-      await api(`/webhook/set/${instanceName}`, { method: "POST", body: JSON.stringify({ url: config.url, enabled: config.enabled, events: config.events, webhookByEvents: false, webhookBase64: false }) })
+      await api(`/webhook/set/${instanceName}`, { method: "POST", body: JSON.stringify({ instanceName, webhook: { url: config.url, enabled: config.enabled, events: config.events, webhookByEvents: false, webhookBase64: false } }) })
       setSaved(true); setTimeout(() => setSaved(false), 3000)
     } catch (e) { setError("Erro ao salvar: " + String(e)) }
     finally { setSaving(false) }
