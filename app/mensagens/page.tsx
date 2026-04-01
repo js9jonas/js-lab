@@ -296,9 +296,9 @@ export default function MensagensPage() {
 
           return (
             <div key={log.id} onClick={() => setSelected(log)}
-              style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 28px", borderBottom: "1px solid var(--border)", cursor: "pointer", background: isNew ? "#0f1a0f" : "transparent", transition: "background 0.2s" }}
+              style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 28px", borderBottom: "1px solid var(--border)", cursor: "pointer", background: isNew ? "#f0fdf4" : "transparent", transition: "background 0.2s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "var(--bg-hover)" }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isNew ? "#0f1a0f" : "transparent" }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isNew ? "#f0fdf4" : "transparent" }}
             >
               {/* Ícone */}
               <div style={{ width: 34, height: 34, borderRadius: 8, background: kc + "18", border: `1px solid ${kc}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, marginTop: 2 }}>
