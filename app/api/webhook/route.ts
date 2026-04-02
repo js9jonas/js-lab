@@ -7,7 +7,46 @@ import type { EvolutionPayload } from "@/lib/types"
 import { classify, extractText } from "@/lib/classifier"
 import { dispatch } from "@/lib/dispatcher"
 import { getMediaUrl } from "@/lib/evolution"
-import { logWebhook } from "@/lib/db"
+import { logWebhook, query } from "@/lib/db"
+
+// Persiste mensagem recebida nas tabelas do chat
+async function persistChatMessage(payload: EvolutionPayload) {
+  const jid     = payload.data?.key?.remoteJid
+  const msgId   = payload.data?.key?.id
+  const fromMe  = payload.data?.key?.fromMe ?? false
+  const msgType = payload.data?.messageType ?? "conversation"
+  const ts      = payload.data?.messageTimestamp
+    ? new Date(Number(payload.data.messageTimestamp) * 1000)
+    : new Date()
+
+  if (!jid || !msgId) return
+
+  const content = extractText(payload) || null
+  const instance = payload.instance
+
+  // Upsert na conversa
+  await query(`
+    INSERT INTO lab.conversations (jid, instance, last_message, last_message_at, unread_count)
+    VALUES ($1, $2, $3, $4, 1)
+    ON CONFLICT (jid) DO UPDATE SET
+      last_message    = $3,
+      last_message_at = $4,
+      unread_count    = CASE WHEN $5 THEN 0 ELSE lab.conversations.unread_count + 1 END,
+      updated_at      = NOW()
+  `, [jid, instance, content, ts, fromMe])
+
+  // Insere mensagem
+  await query(`
+    INSERT INTO lab.messages (id, jid, instance, from_me, message_type, content, status, timestamp, raw)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (id) DO NOTHING
+  `, [
+    msgId, jid, instance, fromMe, msgType, content,
+    fromMe ? "SENT" : "RECEIVED",
+    ts,
+    JSON.stringify(payload.data),
+  ])
+}
 
 // Verificação de segurança via header secret
 function verifySecret(req: NextRequest): boolean {
@@ -66,6 +105,9 @@ export async function POST(req: NextRequest) {
     detail: result.detail ?? result.error,
     raw_payload: payload,
   }).catch(console.error)
+
+  // 7. Persiste mensagem nas tabelas do chat
+  persistChatMessage(payload).catch(console.error)
 
   return NextResponse.json({ ok: true, ...result })
 }

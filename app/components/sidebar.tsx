@@ -11,6 +11,7 @@ const NAV = [
     items: [
       { href: "/",           label: "Dashboard",    icon: "⬡", color: "#3b82f6" },
       { href: "/mensagens",  label: "Mensagens",    icon: "◈", color: "#22c55e" },
+      { href: "/chat",       label: "Chat",         icon: "◫", color: "#16a34a" },
     ],
   },
   {
