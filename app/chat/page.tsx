@@ -509,6 +509,48 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   )
 }
 
+// ─── Botão de importar conversas ─────────────────────────────────────────────
+
+function ImportButton({ onImported }: { onImported: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [result, setResult]   = useState<string | null>(null)
+
+  async function handleImport() {
+    setLoading(true)
+    setResult(null)
+    try {
+      const res  = await fetch("/api/chat/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 200 }),
+      })
+      const data = await res.json() as { imported?: number; total?: number; error?: string }
+      if (data.error) {
+        setResult("Erro")
+      } else {
+        setResult(`+${data.imported}`)
+        onImported()
+      }
+    } catch {
+      setResult("Erro")
+    } finally {
+      setLoading(false)
+      setTimeout(() => setResult(null), 3000)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleImport}
+      disabled={loading}
+      title="Importar conversas da Evolution API"
+      style={{ fontSize: 11, padding: "4px 10px", borderRadius: 99, background: result === "Erro" ? "#fee2e2" : result ? "#dcfce7" : "var(--bg-elevated)", color: result === "Erro" ? "#dc2626" : result ? "#16a34a" : "var(--text-muted)", border: "1px solid var(--border)", cursor: "pointer", fontWeight: 500, transition: "all 0.2s" }}
+    >
+      {loading ? "..." : result ?? "↓ importar"}
+    </button>
+  )
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function ChatPage() {
@@ -543,7 +585,10 @@ export default function ChatPage() {
       {/* Lista de conversas */}
       <div style={{ width: 300, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", background: "var(--bg-surface)", flexShrink: 0 }}>
         <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid var(--border)", background: "#f0f2f5" }}>
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 10, color: "#1a1d23" }}>Conversas</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: "#1a1d23" }}>Conversas</div>
+            <ImportButton onImported={loadConversations} />
+          </div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar..." style={{ width: "100%", padding: "8px 12px", borderRadius: 24, fontSize: 13, background: "#fff", border: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }} />
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
