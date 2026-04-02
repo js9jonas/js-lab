@@ -24,16 +24,19 @@ async function persistChatMessage(payload: EvolutionPayload) {
   const content = extractText(payload) || null
   const instance = payload.instance
 
+  const pushName = payload.data?.pushName ?? null
+
   // Upsert na conversa
   await query(`
-    INSERT INTO lab.conversations (jid, instance, last_message, last_message_at, unread_count)
-    VALUES ($1, $2, $3, $4, 1)
+    INSERT INTO lab.conversations (jid, instance, profile_name, last_message, last_message_at, unread_count)
+    VALUES ($1, $2, $3, $4, $5, 1)
     ON CONFLICT (jid) DO UPDATE SET
-      last_message    = $3,
-      last_message_at = $4,
-      unread_count    = CASE WHEN $5 THEN 0 ELSE lab.conversations.unread_count + 1 END,
+      profile_name    = COALESCE($3, lab.conversations.profile_name),
+      last_message    = $4,
+      last_message_at = $5,
+      unread_count    = CASE WHEN $6 THEN 0 ELSE lab.conversations.unread_count + 1 END,
       updated_at      = NOW()
-  `, [jid, instance, content, ts, fromMe])
+  `, [jid, instance, pushName, content, ts, fromMe])
 
   // Insere mensagem
   await query(`
