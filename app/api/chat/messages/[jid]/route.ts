@@ -103,7 +103,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
           m.from_me, m.message_type, m.content,
           m.media_url, m.status,
           m.timestamp,
-          JSON.stringify(r),
+          JSON.stringify(m),
         ]).catch(() => { /* ignora conflito */ })
       }
     }
