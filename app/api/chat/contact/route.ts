@@ -38,6 +38,7 @@ export interface ContactInfo {
       jid_outro_cliente: string | null
       bonificacao: string | null
       status_indicacao: string | null
+      assinatura_status: string | null
       criado_em: string
     }[]
   } | null
@@ -124,12 +125,13 @@ export async function GET(req: NextRequest) {
     ORDER BY ar.status ASC, ar.validade DESC
   `, [idCliente]).catch(() => [] as AppRow[])
 
-  // 4. Indicações (feitas e recebidas)
+  // 4. Indicações (feitas e recebidas) com status da assinatura do indicado
   type IndicacaoRow = {
     id_indicacao: number; tipo: "fez" | "recebeu"
     id_outro_cliente: number; nome_outro_cliente: string
     telefone_outro_cliente: string | null
     bonificacao: string | null; criado_em: string
+    assinatura_status: string | null
   }
   const indicacaoRows = await query<IndicacaoRow>(`
     SELECT i.id_indicacao,
@@ -138,10 +140,20 @@ export async function GET(req: NextRequest) {
            c2.nome AS nome_outro_cliente,
            co2.telefone AS telefone_outro_cliente,
            i.bonificacao,
-           i.criado_em::text
+           i.criado_em::text,
+           a2.status AS assinatura_status
     FROM public.indicacoes i
     JOIN public.clientes c2 ON c2.id_cliente = i.id_indicado
     LEFT JOIN public.contatos co2 ON co2.id_cliente = c2.id_cliente
+    LEFT JOIN LATERAL (
+      SELECT status FROM public.assinaturas
+      WHERE id_cliente = i.id_indicado
+      ORDER BY CASE status
+        WHEN 'ativo'    THEN 1 WHEN 'pendente' THEN 2
+        WHEN 'atrasado' THEN 3 WHEN 'vencido'  THEN 4
+        ELSE 5 END
+      LIMIT 1
+    ) a2 ON true
     WHERE i.id_parceiro = $1
 
     UNION ALL
@@ -152,7 +164,8 @@ export async function GET(req: NextRequest) {
            c1.nome AS nome_outro_cliente,
            co1.telefone AS telefone_outro_cliente,
            i.bonificacao,
-           i.criado_em::text
+           i.criado_em::text,
+           NULL AS assinatura_status
     FROM public.indicacoes i
     JOIN public.clientes c1 ON c1.id_cliente = i.id_parceiro
     LEFT JOIN public.contatos co1 ON co1.id_cliente = c1.id_cliente
@@ -161,7 +174,6 @@ export async function GET(req: NextRequest) {
     ORDER BY criado_em DESC
   `, [idCliente]).catch(() => [] as IndicacaoRow[])
 
-  // Monta JIDs das indicações para links clicáveis
   const indicacoes = indicacaoRows.map(r => ({
     id_indicacao:           r.id_indicacao,
     tipo:                   r.tipo,
@@ -175,6 +187,7 @@ export async function GET(req: NextRequest) {
       : null,
     bonificacao:            r.bonificacao,
     status_indicacao:       r.bonificacao ?? null,
+    assinatura_status:      r.assinatura_status ?? null,
     criado_em:              r.criado_em,
   }))
 

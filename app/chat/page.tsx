@@ -388,40 +388,68 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
 
           {/* Indicações */}
           {info.cliente.indicacoes.length > 0 && (() => {
-            const fez      = info.cliente.indicacoes.filter(i => i.tipo === "fez")
-            const recebeu  = info.cliente.indicacoes.filter(i => i.tipo === "recebeu")
+            const fez     = info.cliente.indicacoes.filter(i => i.tipo === "fez")
+            const recebeu = info.cliente.indicacoes.filter(i => i.tipo === "recebeu")
+
+            // Contadores por tipo com assinatura ativa
+            const tipos = ["aberta", "cortesia", "comissao"] as const
+            const resumo = tipos.map(t => {
+              const grupo = fez.filter(i => i.bonificacao === t)
+              const ativos = grupo.filter(i => i.assinatura_status === "ativo").length
+              return { tipo: t, total: grupo.length, ativos }
+            }).filter(r => r.total > 0)
+
             return (
               <CollapsibleSection title="INDICAÇÕES" badge={fez.length || undefined} badgeColor="#d97706">
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 
-                  {/* Quem este cliente indicou */}
-                  {fez.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600, marginBottom: 5 }}>
-                        FEZ {fez.length} indicaç{fez.length === 1 ? "ão" : "ões"}
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                        {fez.map(ind => (
-                          <div key={ind.id_indicacao} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "#fefce8", border: "1px solid #fef08a", borderRadius: 6 }}>
-                            <span style={{ fontSize: 11, color: "#ca8a04", flexShrink: 0 }}>→</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              {ind.jid_outro_cliente ? (
-                                <button onClick={() => onOpenConversation(ind.jid_outro_cliente!)}
-                                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 500, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%", display: "block" }}>
-                                  {ind.nome_outro_cliente}
-                                </button>
-                              ) : (
-                                <span style={{ fontSize: 12, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                                  {ind.nome_outro_cliente}
-                                </span>
-                              )}
-                            </div>
-                            <span style={{ fontSize: 10, color: "#ca8a04", flexShrink: 0 }}>
-                              {new Date(ind.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                  {/* Resumo por tipo */}
+                  {resumo.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 4 }}>
+                      {resumo.map(r => (
+                        <div key={r.tipo} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 8px", background: "#fefce8", border: "1px solid #fef08a", borderRadius: 6 }}>
+                          <span style={{ fontSize: 11, color: "#92400e", fontWeight: 600, textTransform: "capitalize" as const }}>{r.tipo}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, color: "#ca8a04" }}>{r.total} total</span>
+                            <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 99, background: "#dcfce7", color: "#16a34a", fontWeight: 600, border: "1px solid #bbf7d0" }}>
+                              {r.ativos} ativo{r.ativos !== 1 ? "s" : ""}
                             </span>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Lista de nomes */}
+                  {fez.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {fez.map(ind => (
+                        <div key={ind.id_indicacao} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6 }}>
+                          <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 99, background: "#fef9c3", color: "#ca8a04", fontWeight: 700, flexShrink: 0, textTransform: "capitalize" as const }}>
+                            {ind.bonificacao ?? "—"}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            {ind.jid_outro_cliente ? (
+                              <button onClick={() => onOpenConversation(ind.jid_outro_cliente!)}
+                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 500, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%", display: "block" }}>
+                                {ind.nome_outro_cliente}
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 12, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+                                {ind.nome_outro_cliente}
+                              </span>
+                            )}
+                          </div>
+                          {ind.assinatura_status && (
+                            <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 99, flexShrink: 0, fontWeight: 600, ...( ind.assinatura_status === "ativo" ? { background: "#dcfce7", color: "#16a34a" } : { background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }) }}>
+                              {ind.assinatura_status}
+                            </span>
+                          )}
+                          <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>
+                            {new Date(ind.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
 
