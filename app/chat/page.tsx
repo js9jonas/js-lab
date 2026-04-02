@@ -58,8 +58,8 @@ function formatCurrency(val: number) {
 
 function statusColor(status: string) {
   const s = status?.toLowerCase()
-  if (s === "ativo") return { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" }
-  if (s === "inativo" || s === "cancelado") return { bg: "#fee2e2", color: "#dc2626", border: "#fecaca" }
+  if (s === "ativo" || s === "ativa") return { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" }
+  if (s === "inativo" || s === "inativa" || s === "cancelado") return { bg: "#fee2e2", color: "#dc2626", border: "#fecaca" }
   if (s === "pendente") return { bg: "#fef9c3", color: "#ca8a04", border: "#fef08a" }
   return { bg: "#f1f5f9", color: "#64748b", border: "#e2e8f0" }
 }
@@ -73,9 +73,7 @@ function scoreColor(score: number) {
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function Avatar({ name, pic, size = 40 }: { name?: string | null; pic?: string | null; size?: number }) {
-  const initials = name
-    ? name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
-    : "?"
+  const initials = name ? name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "?"
   if (pic) return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={pic} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--border)" }} />
@@ -128,7 +126,6 @@ function MessageBubble({ msg }: { msg: Message }) {
   const isMe = msg.from_me
   const [imgExpanded, setImgExpanded] = useState(false)
 
-  // Tenta extrair URL de imagem do raw payload
   const rawImg = (() => {
     if (msg.message_type !== "imageMessage") return null
     try {
@@ -140,60 +137,35 @@ function MessageBubble({ msg }: { msg: Message }) {
 
   return (
     <div style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", marginBottom: 2, padding: "0 12px" }}>
-      <div style={{
-        maxWidth: "65%",
-        background: isMe ? "#dcf8c6" : "#ffffff",
-        border: "1px solid",
-        borderColor: isMe ? "#b7e4a0" : "#e5e7eb",
-        borderRadius: isMe ? "12px 2px 12px 12px" : "2px 12px 12px 12px",
-        padding: msg.message_type === "imageMessage" ? "4px 4px 8px" : "8px 12px",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-        overflow: "hidden",
-      }}>
+      <div style={{ maxWidth: "65%", background: isMe ? "#dcf8c6" : "#ffffff", border: "1px solid", borderColor: isMe ? "#b7e4a0" : "#e5e7eb", borderRadius: isMe ? "12px 2px 12px 12px" : "2px 12px 12px 12px", padding: msg.message_type === "imageMessage" ? "4px 4px 8px" : "8px 12px", boxShadow: "0 1px 2px rgba(0,0,0,0.06)", overflow: "hidden" }}>
 
-        {/* Imagem */}
         {msg.message_type === "imageMessage" && (
           <div>
             {rawImg ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={rawImg}
-                  alt="imagem"
-                  onClick={() => setImgExpanded(true)}
-                  style={{ width: "100%", maxWidth: 280, borderRadius: 8, display: "block", cursor: "zoom-in", objectFit: "cover" }}
-                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
-                />
+                <img src={rawImg} alt="imagem" onClick={() => setImgExpanded(true)} style={{ width: "100%", maxWidth: 280, borderRadius: 8, display: "block", cursor: "zoom-in", objectFit: "cover" }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }} />
                 {imgExpanded && (
-                  <div
-                    onClick={() => setImgExpanded(false)}
-                    style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, cursor: "zoom-out" }}
-                  >
+                  <div onClick={() => setImgExpanded(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, cursor: "zoom-out" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={rawImg} alt="imagem expandida" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} />
+                    <img src={rawImg} alt="expandida" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} />
                   </div>
                 )}
               </>
             ) : (
-              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>🖼 Imagem</div>
+              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-muted)" }}>🖼 Imagem</div>
             )}
-            {msg.content && (
-              <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, padding: "6px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {msg.content}
-              </div>
-            )}
+            {msg.content && <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, padding: "6px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.content}</div>}
           </div>
         )}
 
-        {/* Áudio */}
         {msg.message_type === "audioMessage" && (
-          <div style={{ padding: "4px 4px", display: "flex", alignItems: "center", gap: 8, minWidth: 160 }}>
+          <div style={{ padding: "4px", display: "flex", alignItems: "center", gap: 8, minWidth: 160 }}>
             <span style={{ fontSize: 18 }}>🎵</span>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Mensagem de voz</div>
           </div>
         )}
 
-        {/* Documento */}
         {msg.message_type === "documentMessage" && (
           <div style={{ padding: "4px 8px", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 18 }}>📄</span>
@@ -201,26 +173,17 @@ function MessageBubble({ msg }: { msg: Message }) {
           </div>
         )}
 
-        {/* Sticker */}
         {msg.message_type === "stickerMessage" && (
           <div style={{ padding: "4px 8px", fontSize: 12, color: "var(--text-muted)" }}>🪄 Sticker</div>
         )}
 
-        {/* Texto simples */}
         {(msg.message_type === "conversation" || msg.message_type === "extendedTextMessage") && msg.content && (
-          <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {msg.content}
-          </div>
+          <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.content}</div>
         )}
 
-        {/* Timestamp + status */}
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 3, marginTop: msg.message_type === "imageMessage" ? 4 : 4, paddingRight: msg.message_type === "imageMessage" ? 8 : 0 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 3, marginTop: 4, paddingRight: msg.message_type === "imageMessage" ? 8 : 0 }}>
           <span style={{ fontSize: 10, color: "#94a3b8" }}>{formatMsgTime(msg.timestamp)}</span>
-          {isMe && (
-            <span style={{ fontSize: 10, color: msg.status === "READ" ? "#3b82f6" : "#94a3b8" }}>
-              {msg.status === "READ" || msg.status === "DELIVERED" ? "✓✓" : "✓"}
-            </span>
-          )}
+          {isMe && <span style={{ fontSize: 10, color: msg.status === "READ" ? "#3b82f6" : "#94a3b8" }}>{msg.status === "READ" || msg.status === "DELIVERED" ? "✓✓" : "✓"}</span>}
         </div>
       </div>
     </div>
@@ -239,26 +202,45 @@ function DateSeparator({ date }: { date: string }) {
   )
 }
 
-// ─── Coluna direita: dados do contato ────────────────────────────────────────
+// ─── Seção colapsável genérica ────────────────────────────────────────────────
 
-function ContactPanel({ conv }: { conv: Conversation }) {
+function CollapsibleSection({ title, badge, badgeColor = "#6b7280", defaultOpen = false, children }: {
+  title: string; badge?: string | number; badgeColor?: string; defaultOpen?: boolean; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div>
+      <div onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none", marginBottom: open ? 8 : 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.07em" }}>{title}</span>
+          {badge !== undefined && (
+            <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 99, background: badgeColor + "22", color: badgeColor, fontWeight: 600 }}>{badge}</span>
+          )}
+        </div>
+        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{open ? "▲" : "▼"}</span>
+      </div>
+      {open && children}
+    </div>
+  )
+}
+
+// ─── Coluna direita ───────────────────────────────────────────────────────────
+
+function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpenConversation: (jid: string) => void }) {
   const [info, setInfo] = useState<ContactInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    setInfo(null)
+    setLoading(true); setInfo(null)
     fetch(`/api/chat/contact?jid=${encodeURIComponent(conv.jid)}`)
-      .then(r => r.json())
-      .then(d => setInfo(d as ContactInfo))
-      .catch(() => {})
+      .then(r => r.json()).then(d => setInfo(d as ContactInfo)).catch(() => {})
       .finally(() => setLoading(false))
   }, [conv.jid])
 
   return (
     <div style={{ width: 280, borderLeft: "1px solid var(--border)", background: "var(--bg-surface)", display: "flex", flexDirection: "column", overflowY: "auto", flexShrink: 0 }}>
 
-      {/* Header do contato */}
+      {/* Header */}
       <div style={{ padding: "20px 16px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, background: "var(--bg-elevated)" }}>
         <Avatar name={conv.profile_name ?? formatJid(conv.jid)} pic={info?.profile_pic_url ?? conv.profile_pic_url} size={64} />
         <div style={{ textAlign: "center" }}>
@@ -267,23 +249,18 @@ function ContactPanel({ conv }: { conv: Conversation }) {
         </div>
       </div>
 
-      {loading && (
-        <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 12, textAlign: "center" }}>Buscando dados...</div>
-      )}
+      {loading && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 12, textAlign: "center" }}>Buscando dados...</div>}
 
       {!loading && !info?.cliente && (
         <div style={{ padding: 16 }}>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.07em", marginBottom: 8 }}>CLIENTE</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "12px", background: "var(--bg-elevated)", borderRadius: 8, textAlign: "center" }}>
-            Não encontrado no js-painel
-          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", padding: 12, background: "var(--bg-elevated)", borderRadius: 8, textAlign: "center" }}>Não encontrado no js-painel</div>
         </div>
       )}
 
       {!loading && info?.cliente && (
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
 
-          {/* Dados do cliente */}
+          {/* Dados básicos */}
           <div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.07em", marginBottom: 10 }}>CLIENTE</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -305,10 +282,7 @@ function ContactPanel({ conv }: { conv: Conversation }) {
 
           {/* Assinaturas */}
           {info.cliente.assinaturas.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.07em", marginBottom: 10 }}>
-                ASSINATURAS ({info.cliente.assinaturas.length})
-              </div>
+            <CollapsibleSection title="ASSINATURAS" badge={info.cliente.assinaturas.length} badgeColor="#16a34a" defaultOpen>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {info.cliente.assinaturas.map(a => {
                   const sc = statusColor(a.status)
@@ -317,26 +291,18 @@ function ContactPanel({ conv }: { conv: Conversation }) {
                     <div key={a.id_assinatura} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                         <span style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--text-muted)" }}>#{a.id_assinatura}</span>
-                        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>
-                          {a.status}
-                        </span>
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>{a.status}</span>
                       </div>
-
                       {a.plano && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                           <div style={{ display: "flex", justifyContent: "space-between" }}>
                             <span style={{ fontSize: 12, fontWeight: 500 }}>{a.plano.tipo}</span>
                             <span style={{ fontSize: 12, fontWeight: 600, color: "#16a34a" }}>{formatCurrency(a.plano.valor)}</span>
                           </div>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                            {a.plano.telas} tela{a.plano.telas !== 1 ? "s" : ""} · {a.plano.meses} {a.plano.meses === 1 ? "mês" : "meses"}
-                          </div>
-                          {a.plano.descricao && (
-                            <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic" }}>{a.plano.descricao}</div>
-                          )}
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{a.plano.telas} tela{a.plano.telas !== 1 ? "s" : ""} · {a.plano.meses} {a.plano.meses === 1 ? "mês" : "meses"}</div>
+                          {a.plano.descricao && <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic" }}>{a.plano.descricao}</div>}
                         </div>
                       )}
-
                       {a.pacote && (
                         <div style={{ marginTop: 6, padding: "6px 8px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6 }}>
                           <div style={{ fontSize: 10, color: "#2563eb", fontWeight: 600, marginBottom: 3 }}>PACOTE</div>
@@ -346,38 +312,113 @@ function ContactPanel({ conv }: { conv: Conversation }) {
                           </div>
                         </div>
                       )}
-
                       {a.venc_contas && (
                         <div style={{ marginTop: 8, padding: "6px 8px", background: vencido ? "#fee2e2" : "#f0fdf4", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 10, color: vencido ? "#dc2626" : "#16a34a", fontWeight: 600 }}>
-                            {vencido ? "CONTA VENCIDA" : "VENC. CONTA"}
-                          </span>
-                          <span style={{ fontSize: 11, color: vencido ? "#dc2626" : "#16a34a", fontWeight: 600 }}>
-                            {new Date(a.venc_contas).toLocaleDateString("pt-BR")}
-                          </span>
+                          <span style={{ fontSize: 10, color: vencido ? "#dc2626" : "#16a34a", fontWeight: 600 }}>{vencido ? "CONTA VENCIDA" : "VENC. CONTA"}</span>
+                          <span style={{ fontSize: 11, color: vencido ? "#dc2626" : "#16a34a", fontWeight: 600 }}>{new Date(a.venc_contas).toLocaleDateString("pt-BR")}</span>
                         </div>
                       )}
-
                       {a.venc_contrato && (
                         <div style={{ marginTop: 4, padding: "6px 8px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: "#2563eb", fontWeight: 600 }}>VENC. CONTRATO</span>
-                          <span style={{ fontSize: 11, color: "#2563eb", fontWeight: 600 }}>
-                            {new Date(a.venc_contrato).toLocaleDateString("pt-BR")}
-                          </span>
+                          <span style={{ fontSize: 11, color: "#2563eb", fontWeight: 600 }}>{new Date(a.venc_contrato).toLocaleDateString("pt-BR")}</span>
                         </div>
                       )}
-
-                      {a.identificacao && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>
-                          {a.identificacao}
-                        </div>
-                      )}
+                      {a.identificacao && <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>{a.identificacao}</div>}
                     </div>
                   )
                 })}
               </div>
-            </div>
+            </CollapsibleSection>
           )}
+
+          {/* Aplicativos */}
+          {info.cliente.aplicativos.length > 0 && (
+            <CollapsibleSection title="APLICATIVOS" badge={info.cliente.aplicativos.length} badgeColor="#7c3aed">
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {info.cliente.aplicativos.map(app => {
+                  const sc = statusColor(app.status)
+                  const vencido = app.validade ? new Date(app.validade) < new Date() : false
+                  return (
+                    <div key={app.id_app_registro} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, padding: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{app.nome_app}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 99, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>{app.status}</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Chave</span>
+                          <span style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--text-secondary)" }}>{app.chave}</span>
+                        </div>
+                        {app.mac && (
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontSize: 10, color: "var(--text-muted)" }}>MAC</span>
+                            <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--text-muted)" }}>{app.mac}</span>
+                          </div>
+                        )}
+                        {app.validade && (
+                          <div style={{ marginTop: 4, padding: "4px 8px", background: vencido ? "#fee2e2" : "#f0fdf4", borderRadius: 4, display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontSize: 10, color: vencido ? "#dc2626" : "#16a34a", fontWeight: 600 }}>{vencido ? "VENCIDO" : "VALIDADE"}</span>
+                            <span style={{ fontSize: 10, color: vencido ? "#dc2626" : "#16a34a", fontWeight: 600 }}>{new Date(app.validade).toLocaleDateString("pt-BR")}</span>
+                          </div>
+                        )}
+                        {app.observacao && <div style={{ fontSize: 10, color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{app.observacao}</div>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CollapsibleSection>
+          )}
+
+          {/* Indicações */}
+          {info.cliente.indicacoes.length > 0 && (
+            <CollapsibleSection title="INDICAÇÕES" badge={info.cliente.indicacoes.length} badgeColor="#d97706">
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {/* Resumo por tipo */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  <div style={{ flex: 1, textAlign: "center", padding: "6px 4px", background: "#fef9c3", border: "1px solid #fef08a", borderRadius: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#ca8a04" }}>{info.cliente.indicacoes.filter(i => i.tipo === "fez").length}</div>
+                    <div style={{ fontSize: 9, color: "#92400e", fontWeight: 600 }}>FEZ</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: "center", padding: "6px 4px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#d97706" }}>{info.cliente.indicacoes.filter(i => i.tipo === "recebeu").length}</div>
+                    <div style={{ fontSize: 9, color: "#92400e", fontWeight: 600 }}>RECEBEU</div>
+                  </div>
+                </div>
+
+                {/* Lista de indicações */}
+                {info.cliente.indicacoes.map(ind => (
+                  <div key={ind.id_indicacao} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6 }}>
+                    <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 99, background: ind.tipo === "fez" ? "#fef9c3" : "#fef3c7", color: "#ca8a04", fontWeight: 700, flexShrink: 0 }}>
+                      {ind.tipo === "fez" ? "→" : "←"}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {ind.jid_outro_cliente ? (
+                        <button
+                          onClick={() => onOpenConversation(ind.jid_outro_cliente!)}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 500, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%", display: "block" }}
+                        >
+                          {ind.nome_outro_cliente}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+                          {ind.nome_outro_cliente}
+                        </span>
+                      )}
+                      {ind.bonificacao && (
+                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{ind.bonificacao}</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>
+                      {new Date(ind.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
+
         </div>
       )}
     </div>
@@ -396,13 +437,13 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
 // ─── Área de mensagens ────────────────────────────────────────────────────────
 
 function MessagesArea({ conv }: { conv: Conversation }) {
-  const [messages, setMessages]   = useState<Message[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [text, setText]           = useState("")
-  const [sending, setSending]     = useState(false)
-  const bottomRef  = useRef<HTMLDivElement>(null)
-  const inputRef   = useRef<HTMLTextAreaElement>(null)
-  const prevLen    = useRef(0)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [text, setText]         = useState("")
+  const [sending, setSending]   = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef  = useRef<HTMLTextAreaElement>(null)
+  const prevLen   = useRef(0)
 
   const loadMessages = useCallback(async () => {
     try {
@@ -416,9 +457,8 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   useEffect(() => { setLoading(true); setMessages([]); loadMessages() }, [conv.jid, loadMessages])
 
   useEffect(() => {
-    if (messages.length > prevLen.current) {
+    if (messages.length > prevLen.current)
       bottomRef.current?.scrollIntoView({ behavior: messages.length === prevLen.current + 1 ? "smooth" : "auto" })
-    }
     prevLen.current = messages.length
   }, [messages.length])
 
@@ -427,20 +467,11 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   async function handleSend() {
     const t = text.trim()
     if (!t || sending) return
-    setSending(true)
-    setText("")
-    const tempMsg: Message = {
-      id: `temp_${Date.now()}`, jid: conv.jid, from_me: true,
-      message_type: "conversation", content: t, media_url: null,
-      status: "PENDING", timestamp: new Date().toISOString(),
-    }
+    setSending(true); setText("")
+    const tempMsg: Message = { id: `temp_${Date.now()}`, jid: conv.jid, from_me: true, message_type: "conversation", content: t, media_url: null, status: "PENDING", timestamp: new Date().toISOString() }
     setMessages(prev => [...prev, tempMsg])
     try {
-      await fetch("/api/chat/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jid: conv.jid, text: t }),
-      })
+      await fetch("/api/chat/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jid: conv.jid, text: t }) })
       await loadMessages()
     } catch { /* silencioso */ }
     finally { setSending(false) }
@@ -454,20 +485,15 @@ function MessagesArea({ conv }: { conv: Conversation }) {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-
-      {/* Header */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, background: "#f0f2f5" }}>
         <Avatar name={conv.profile_name ?? formatJid(conv.jid)} pic={conv.profile_pic_url} size={38} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{conv.profile_name ?? formatJid(conv.jid)}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>+{formatJid(conv.jid)}</div>
         </div>
-        {conv.shadow_mode && (
-          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "#7c3aed22", color: "#7c3aed", fontWeight: 600, border: "1px solid #7c3aed33" }}>◆ sombra</span>
-        )}
+        {conv.shadow_mode && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "#7c3aed22", color: "#7c3aed", fontWeight: 600, border: "1px solid #7c3aed33" }}>◆ sombra</span>}
       </div>
 
-      {/* Mensagens */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0", background: "#e5ddd5" }}>
         {loading && <div style={{ textAlign: "center", padding: 40, color: "#888", fontSize: 13 }}>Carregando mensagens...</div>}
         {!loading && messages.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "#888", fontSize: 13 }}>Nenhuma mensagem ainda.</div>}
@@ -485,11 +511,9 @@ function MessagesArea({ conv }: { conv: Conversation }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div style={{ padding: "10px 12px", borderTop: "1px solid var(--border)", background: "#f0f2f5", display: "flex", alignItems: "flex-end", gap: 8 }}>
         <textarea
-          ref={inputRef}
-          value={text}
+          ref={inputRef} value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Digite uma mensagem..."
@@ -497,11 +521,8 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           style={{ flex: 1, resize: "none", borderRadius: 24, padding: "10px 16px", fontSize: 13, background: "#fff", border: "none", maxHeight: 120, lineHeight: 1.5, overflowY: "auto", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
           onInput={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px" }}
         />
-        <button
-          onClick={handleSend}
-          disabled={!text.trim() || sending}
-          style={{ width: 42, height: 42, borderRadius: "50%", background: text.trim() ? "#16a34a" : "#ccc", border: "none", color: "#fff", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
-        >
+        <button onClick={handleSend} disabled={!text.trim() || sending}
+          style={{ width: 42, height: 42, borderRadius: "50%", background: text.trim() ? "#16a34a" : "#ccc", border: "none", color: "#fff", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}>
           ➤
         </button>
       </div>
@@ -509,43 +530,26 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   )
 }
 
-// ─── Botão de importar conversas ─────────────────────────────────────────────
+// ─── Botão de importar ────────────────────────────────────────────────────────
 
 function ImportButton({ onImported }: { onImported: () => void }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState<string | null>(null)
 
   async function handleImport() {
-    setLoading(true)
-    setResult(null)
+    setLoading(true); setResult(null)
     try {
-      const res  = await fetch("/api/chat/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 200 }),
-      })
-      const data = await res.json() as { imported?: number; total?: number; error?: string }
-      if (data.error) {
-        setResult("Erro")
-      } else {
-        setResult(`+${data.imported}`)
-        onImported()
-      }
-    } catch {
-      setResult("Erro")
-    } finally {
-      setLoading(false)
-      setTimeout(() => setResult(null), 3000)
-    }
+      const res  = await fetch("/api/chat/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit: 200 }) })
+      const data = await res.json() as { imported?: number; error?: string }
+      setResult(data.error ? "Erro" : `+${data.imported}`)
+      if (!data.error) onImported()
+    } catch { setResult("Erro") }
+    finally { setLoading(false); setTimeout(() => setResult(null), 3000) }
   }
 
   return (
-    <button
-      onClick={handleImport}
-      disabled={loading}
-      title="Importar conversas da Evolution API"
-      style={{ fontSize: 11, padding: "4px 10px", borderRadius: 99, background: result === "Erro" ? "#fee2e2" : result ? "#dcfce7" : "var(--bg-elevated)", color: result === "Erro" ? "#dc2626" : result ? "#16a34a" : "var(--text-muted)", border: "1px solid var(--border)", cursor: "pointer", fontWeight: 500, transition: "all 0.2s" }}
-    >
+    <button onClick={handleImport} disabled={loading} title="Importar conversas da Evolution API"
+      style={{ fontSize: 11, padding: "4px 10px", borderRadius: 99, background: result === "Erro" ? "#fee2e2" : result ? "#dcfce7" : "var(--bg-elevated)", color: result === "Erro" ? "#dc2626" : result ? "#16a34a" : "var(--text-muted)", border: "1px solid var(--border)", cursor: "pointer", fontWeight: 500, transition: "all 0.2s" }}>
       {loading ? "..." : result ?? "↓ importar"}
     </button>
   )
@@ -574,6 +578,14 @@ export default function ChatPage() {
     return () => clearInterval(t)
   }, [loadConversations])
 
+  // Abre conversa por JID (usado pelo botão de indicação)
+  function openByJid(jid: string) {
+    const found = conversations.find(c => c.jid === jid)
+    if (found) { setSelected(found); return }
+    // Cria entrada temporária se não existir ainda na lista
+    setSelected({ jid, instance: "jsevolution", profile_name: null, profile_pic_url: null, last_message: null, last_message_at: null, unread_count: 0, is_client: null, shadow_mode: true, muted: false })
+  }
+
   const filtered = conversations.filter(c => {
     const q = search.toLowerCase()
     return (c.profile_name ?? "").toLowerCase().includes(q) || c.jid.includes(q)
@@ -582,7 +594,7 @@ export default function ChatPage() {
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
 
-      {/* Lista de conversas */}
+      {/* Lista */}
       <div style={{ width: 300, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", background: "var(--bg-surface)", flexShrink: 0 }}>
         <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid var(--border)", background: "#f0f2f5" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -593,18 +605,14 @@ export default function ChatPage() {
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
           {loading && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>Carregando...</div>}
-          {!loading && filtered.length === 0 && (
-            <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>
-              {search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}
-            </div>
-          )}
+          {!loading && filtered.length === 0 && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>{search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}</div>}
           {filtered.map(conv => (
             <ConversationItem key={conv.jid} conv={conv} active={selected?.jid === conv.jid} onClick={() => setSelected(conv)} />
           ))}
         </div>
       </div>
 
-      {/* Centro: mensagens */}
+      {/* Mensagens */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {selected ? (
           <MessagesArea key={selected.jid} conv={selected} />
@@ -617,9 +625,8 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Coluna direita: dados do contato */}
-      {selected && <ContactPanel key={selected.jid} conv={selected} />}
-
+      {/* Coluna direita */}
+      {selected && <ContactPanel key={selected.jid} conv={selected} onOpenConversation={openByJid} />}
     </div>
   )
 }
