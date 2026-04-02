@@ -24,7 +24,7 @@ async function persistChatMessage(payload: EvolutionPayload) {
   const content = extractText(payload) || null
   const instance = payload.instance
 
-  const pushName = payload.data?.pushName ?? null
+  const pushName = (!fromMe && payload.data?.pushName) ? payload.data.pushName : null
 
   // Upsert na conversa
   await query(`
