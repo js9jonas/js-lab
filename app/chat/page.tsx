@@ -227,15 +227,32 @@ function CollapsibleSection({ title, badge, badgeColor = "#6b7280", defaultOpen 
 // ─── Coluna direita ───────────────────────────────────────────────────────────
 
 function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpenConversation: (jid: string) => void }) {
-  const [info, setInfo] = useState<ContactInfo | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [info, setInfo]           = useState<ContactInfo | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [clienteId, setClienteId] = useState<number | null>(null)
 
-  useEffect(() => {
-    setLoading(true); setInfo(null)
-    fetch(`/api/chat/contact?jid=${encodeURIComponent(conv.jid)}`)
-      .then(r => r.json()).then(d => setInfo(d as ContactInfo)).catch(() => {})
+  const fetchInfo = useCallback(async (cid?: number) => {
+    setLoading(true)
+    const params = new URLSearchParams({ jid: conv.jid })
+    if (cid) params.set("cliente_id", String(cid))
+    fetch(`/api/chat/contact?${params}`)
+      .then(r => r.json()).then(d => {
+        setInfo(d as ContactInfo)
+        // Fixa o cliente carregado para trocar depois
+        if (!cid && (d as ContactInfo).todos_clientes?.length > 0)
+          setClienteId((d as ContactInfo).todos_clientes[0].id_cliente)
+      }).catch(() => {})
       .finally(() => setLoading(false))
   }, [conv.jid])
+
+  useEffect(() => { setInfo(null); setClienteId(null); fetchInfo() }, [conv.jid, fetchInfo])
+
+  function handleSelectCliente(id: number) {
+    setClienteId(id)
+    fetchInfo(id)
+  }
+
+  const multiplos = (info?.todos_clientes?.length ?? 0) > 1
 
   return (
     <div style={{ width: 280, borderLeft: "1px solid var(--border)", background: "var(--bg-surface)", display: "flex", flexDirection: "column", overflowY: "auto", flexShrink: 0 }}>
@@ -247,6 +264,47 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
           <div style={{ fontWeight: 600, fontSize: 14 }}>{conv.profile_name ?? formatJid(conv.jid)}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--mono)", marginTop: 2 }}>+{formatJid(conv.jid)}</div>
         </div>
+
+        {/* Seletor de cliente — aparece só quando há mais de um */}
+        {multiplos && info && (
+          <div style={{ width: "100%", marginTop: 4 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600, textAlign: "center", marginBottom: 6 }}>
+              {info.todos_clientes.length} CLIENTES NESTE NÚMERO
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {info.todos_clientes.map(c => {
+                const sc = c.status_principal ? statusColor(c.status_principal) : statusColor("")
+                const ativo = clienteId === c.id_cliente
+                return (
+                  <button
+                    key={c.id_cliente}
+                    onClick={() => handleSelectCliente(c.id_cliente)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "7px 10px", borderRadius: 8, cursor: "pointer",
+                      background: ativo ? "var(--bg-active)" : "var(--bg-surface)",
+                      border: ativo ? "1px solid var(--border-light)" : "1px solid var(--border)",
+                      textAlign: "left", transition: "all 0.12s",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: ativo ? 600 : 400, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.nome}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--mono)" }}>#{c.id_cliente}</div>
+                    </div>
+                    {c.status_principal && (
+                      <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, flexShrink: 0, fontWeight: 600 }}>
+                        {c.status_principal}
+                      </span>
+                    )}
+                    {ativo && <span style={{ fontSize: 10, color: "#2563eb", flexShrink: 0 }}>✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {loading && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 12, textAlign: "center" }}>Buscando dados...</div>}
