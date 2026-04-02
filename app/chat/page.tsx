@@ -287,6 +287,21 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
                 {info.cliente.assinaturas.map(a => {
                   const sc = statusColor(a.status)
                   const vencido = a.venc_contas ? new Date(a.venc_contas) < new Date() : false
+                  const inativa = ["cancelado", "inativo", "inativa", "cancelada"].includes(a.status?.toLowerCase() ?? "")
+
+                  // Assinaturas inativas/canceladas — linha simples
+                  if (inativa) return (
+                    <div key={a.id_assinatura} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6, opacity: 0.6 }}>
+                      <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--text-muted)" }}>#{a.id_assinatura}</span>
+                      <span style={{ flex: 1, fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.plano?.tipo ?? a.pacote?.contrato ?? "—"}
+                      </span>
+                      {a.venc_contas && <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>{new Date(a.venc_contas).toLocaleDateString("pt-BR")}</span>}
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 99, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, flexShrink: 0 }}>{a.status}</span>
+                    </div>
+                  )
+
+                  // Assinaturas ativas/pendentes/vencidas — card completo
                   return (
                     <div key={a.id_assinatura} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -372,52 +387,66 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
           )}
 
           {/* Indicações */}
-          {info.cliente.indicacoes.length > 0 && (
-            <CollapsibleSection title="INDICAÇÕES" badge={info.cliente.indicacoes.length} badgeColor="#d97706">
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {/* Resumo por tipo */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
-                  <div style={{ flex: 1, textAlign: "center", padding: "6px 4px", background: "#fef9c3", border: "1px solid #fef08a", borderRadius: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#ca8a04" }}>{info.cliente.indicacoes.filter(i => i.tipo === "fez").length}</div>
-                    <div style={{ fontSize: 9, color: "#92400e", fontWeight: 600 }}>FEZ</div>
-                  </div>
-                  <div style={{ flex: 1, textAlign: "center", padding: "6px 4px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#d97706" }}>{info.cliente.indicacoes.filter(i => i.tipo === "recebeu").length}</div>
-                    <div style={{ fontSize: 9, color: "#92400e", fontWeight: 600 }}>RECEBEU</div>
-                  </div>
-                </div>
+          {info.cliente.indicacoes.length > 0 && (() => {
+            const fez      = info.cliente.indicacoes.filter(i => i.tipo === "fez")
+            const recebeu  = info.cliente.indicacoes.filter(i => i.tipo === "recebeu")
+            return (
+              <CollapsibleSection title="INDICAÇÕES" badge={fez.length || undefined} badgeColor="#d97706">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 
-                {/* Lista de indicações */}
-                {info.cliente.indicacoes.map(ind => (
-                  <div key={ind.id_indicacao} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6 }}>
-                    <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 99, background: ind.tipo === "fez" ? "#fef9c3" : "#fef3c7", color: "#ca8a04", fontWeight: 700, flexShrink: 0 }}>
-                      {ind.tipo === "fez" ? "→" : "←"}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {ind.jid_outro_cliente ? (
-                        <button
-                          onClick={() => onOpenConversation(ind.jid_outro_cliente!)}
-                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 500, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%", display: "block" }}
-                        >
-                          {ind.nome_outro_cliente}
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                          {ind.nome_outro_cliente}
-                        </span>
-                      )}
-                      {ind.bonificacao && (
-                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{ind.bonificacao}</span>
-                      )}
+                  {/* Quem este cliente indicou */}
+                  {fez.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600, marginBottom: 5 }}>
+                        FEZ {fez.length} indicaç{fez.length === 1 ? "ão" : "ões"}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        {fez.map(ind => (
+                          <div key={ind.id_indicacao} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "#fefce8", border: "1px solid #fef08a", borderRadius: 6 }}>
+                            <span style={{ fontSize: 11, color: "#ca8a04", flexShrink: 0 }}>→</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {ind.jid_outro_cliente ? (
+                                <button onClick={() => onOpenConversation(ind.jid_outro_cliente!)}
+                                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 500, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%", display: "block" }}>
+                                  {ind.nome_outro_cliente}
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: 12, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+                                  {ind.nome_outro_cliente}
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: 10, color: "#ca8a04", flexShrink: 0 }}>
+                              {new Date(ind.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>
-                      {new Date(ind.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-          )}
+                  )}
+
+                  {/* Quem indicou este cliente — sublinha única */}
+                  {recebeu.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6, opacity: 0.75 }}>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>←</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Indicado por</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {recebeu[0].jid_outro_cliente ? (
+                          <button onClick={() => onOpenConversation(recebeu[0].jid_outro_cliente!)}
+                            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: "#2563eb", fontWeight: 500, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%", display: "block" }}>
+                            {recebeu[0].nome_outro_cliente}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{recebeu[0].nome_outro_cliente}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </CollapsibleSection>
+            )
+          })()}
 
         </div>
       )}
