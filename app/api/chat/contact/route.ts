@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
     LEFT JOIN public.planos pl     ON pl.id_plano  = a.id_plano
     LEFT JOIN public.pacote pa     ON pa.id_pacote = a.id_pacote
     WHERE co.telefone IN (${placeholders})
-    ORDER BY a.status ASC, a.venc_contas DESC
+    ORDER BY a.venc_contrato DESC NULLS LAST, a.venc_contas DESC NULLS LAST
     LIMIT 10
   `, variants).catch(() => [] as AssinaturaRow[])
 

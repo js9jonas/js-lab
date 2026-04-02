@@ -294,7 +294,7 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
                     <div key={a.id_assinatura} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6, opacity: 0.6 }}>
                       <span style={{ fontSize: 10, fontFamily: "var(--mono)", color: "var(--text-muted)" }}>#{a.id_assinatura}</span>
                       <span style={{ flex: 1, fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {a.plano?.tipo ?? a.pacote?.contrato ?? "—"}
+                        {a.pacote?.contrato ?? a.plano?.tipo ?? "—"}
                       </span>
                       {a.venc_contas && <span style={{ fontSize: 10, color: "var(--text-muted)", flexShrink: 0 }}>{new Date(a.venc_contas).toLocaleDateString("pt-BR")}</span>}
                       <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 99, background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, flexShrink: 0 }}>{a.status}</span>
