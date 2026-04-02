@@ -331,6 +331,19 @@ function ContactPanel({ conv }: { conv: Conversation }) {
                           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                             {a.plano.telas} tela{a.plano.telas !== 1 ? "s" : ""} · {a.plano.meses} {a.plano.meses === 1 ? "mês" : "meses"}
                           </div>
+                          {a.plano.descricao && (
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic" }}>{a.plano.descricao}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {a.pacote && (
+                        <div style={{ marginTop: 6, padding: "6px 8px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6 }}>
+                          <div style={{ fontSize: 10, color: "#2563eb", fontWeight: 600, marginBottom: 3 }}>PACOTE</div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            {a.pacote.contrato && <span style={{ fontSize: 12, color: "#1e40af" }}>{a.pacote.contrato}</span>}
+                            {a.pacote.telas && <span style={{ fontSize: 11, color: "#3b82f6" }}>{a.pacote.telas} tela{a.pacote.telas !== 1 ? "s" : ""}</span>}
+                          </div>
                         </div>
                       )}
 
@@ -346,9 +359,9 @@ function ContactPanel({ conv }: { conv: Conversation }) {
                       )}
 
                       {a.venc_contrato && (
-                        <div style={{ marginTop: 4, padding: "6px 8px", background: "var(--bg-elevated)", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600 }}>VENC. CONTRATO</span>
-                          <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600 }}>
+                        <div style={{ marginTop: 4, padding: "6px 8px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, color: "#2563eb", fontWeight: 600 }}>VENC. CONTRATO</span>
+                          <span style={{ fontSize: 11, color: "#2563eb", fontWeight: 600 }}>
                             {new Date(a.venc_contrato).toLocaleDateString("pt-BR")}
                           </span>
                         </div>
