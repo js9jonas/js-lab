@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       [agente.id]
     )
 
-    const modulosAtivos = modulos.filter(m =>
+    const modulosAtivos = (modulos ?? []).filter(m =>
       m.gatilhos.length === 0 ||
       m.gatilhos.some(g => textoRecente.includes(g.toLowerCase()))
     )
