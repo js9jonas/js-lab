@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       `SELECT id, from_me, content, message_type, timestamp, raw
        FROM lab.messages
        WHERE jid = $1
-         AND DATE(timestamp AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE AT TIME ZONE 'America/Sao_Paulo'
+         AND timestamp >= CURRENT_DATE AND timestamp < CURRENT_DATE + INTERVAL '1 day'
        ORDER BY timestamp ASC`,
       [jid]
     )
