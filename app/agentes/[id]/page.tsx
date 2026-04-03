@@ -27,7 +27,7 @@ interface ModuloSugerido {
 
 interface ChatMsg { role: "user" | "assistant"; content: string }
 
-type Tab = "refinamento" | "modulos" | "prompt" | "aprendizados" | "versoes"
+type Tab = "refinamento" | "modulos" | "prompt" | "aprendizados" | "versoes" | "configuracao"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -493,6 +493,123 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
   )
 }
 
+// ─── Aba: Configuração ───────────────────────────────────────────────────────
+
+function TabConfig({ agente, onSaved }: { agente: AgenteDetalhe; onSaved: () => void }) {
+  const [nome, setNome]         = useState(agente.nome)
+  const [descricao, setDescricao] = useState(agente.descricao ?? "")
+  const [ativo, setAtivo]       = useState(agente.ativo)
+  const [instancias, setInstancias] = useState<string[]>(
+    agente.instancias.filter(i => i.ativo).map(i => i.instance)
+  )
+  const [instDisp, setInstDisp] = useState<string[]>([])
+  const [saving, setSaving]     = useState(false)
+  const [saved, setSaved]       = useState(false)
+
+  useEffect(() => {
+    fetch("/api/evolution/instance/fetchInstances")
+      .then(r => r.json())
+      .then((data: unknown) => {
+        if (Array.isArray(data))
+          setInstDisp(data.map((i: Record<string, unknown>) => i.name as string).filter(Boolean))
+      }).catch(() => {})
+  }, [])
+
+  function toggleInst(inst: string) {
+    setInstancias(prev => prev.includes(inst) ? prev.filter(i => i !== inst) : [...prev, inst])
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    await fetch(`/api/agentes/${agente.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, descricao, ativo, instancias }),
+    })
+    setSaving(false); setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+    onSaved()
+  }
+
+  const changed =
+    nome !== agente.nome ||
+    descricao !== (agente.descricao ?? "") ||
+    ativo !== agente.ativo ||
+    JSON.stringify(instancias.sort()) !== JSON.stringify(agente.instancias.filter(i => i.ativo).map(i => i.instance).sort())
+
+  // Instâncias que não estão na lista de disponíveis mas estão vinculadas
+  const todasInst = Array.from(new Set([...instDisp, ...agente.instancias.map(i => i.instance)]))
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 600 }}>
+
+      {/* Nome e descrição */}
+      <div>
+        <SectionLabel>IDENTIFICAÇÃO</SectionLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 5 }}>Nome</div>
+            <input value={nome} onChange={e => setNome(e.target.value)} style={{ width: "100%", padding: "9px 12px", fontSize: 14, fontWeight: 500 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 5 }}>Descrição</div>
+            <input value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Para que serve este agente?" style={{ width: "100%", padding: "9px 12px" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Instâncias */}
+      <div>
+        <SectionLabel>INSTÂNCIAS WHATSAPP VINCULADAS</SectionLabel>
+        <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+            Selecione quais instâncias este agente irá atender. Cada instância só pode ter um agente ativo.
+          </div>
+          {todasInst.length === 0 ? (
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Nenhuma instância disponível</div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {todasInst.map(inst => {
+                const sel = instancias.includes(inst)
+                return (
+                  <div key={inst} onClick={() => toggleInst(inst)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 99, cursor: "pointer", fontSize: 13, fontWeight: sel ? 600 : 400, background: sel ? "#2563eb" : "var(--bg-surface)", color: sel ? "#fff" : "var(--text-secondary)", border: `1px solid ${sel ? "#2563eb" : "var(--border)"}`, transition: "all 0.15s" }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: sel ? "#fff" : "#22c55e", flexShrink: 0 }} />
+                    {inst}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Status */}
+      <div>
+        <SectionLabel>STATUS</SectionLabel>
+        <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 10, padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>Agente ativo</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+              {ativo ? "O agente está processando mensagens das instâncias vinculadas." : "O agente está pausado e não processará mensagens."}
+            </div>
+          </div>
+          <div onClick={() => setAtivo(a => !a)} style={{ width: 44, height: 24, borderRadius: 12, cursor: "pointer", background: ativo ? "#16a34a" : "var(--bg-elevated)", position: "relative", border: "1px solid var(--border)", transition: "background 0.2s", flexShrink: 0 }}>
+            <div style={{ position: "absolute", top: 2, left: ativo ? 22 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Salvar */}
+      {changed && (
+        <button onClick={handleSave} disabled={saving || !nome.trim()}
+          style={{ padding: "10px 24px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: saved ? "#16a34a" : "#2563eb", color: "#fff", border: "none", cursor: "pointer", alignSelf: "flex-start", transition: "background 0.3s" }}>
+          {saving ? "Salvando..." : saved ? "✓ Salvo!" : "Salvar configurações"}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function AgenteDetalhe() {
@@ -529,6 +646,7 @@ export default function AgenteDetalhe() {
     { id: "prompt",       label: "Prompt base" },
     { id: "aprendizados", label: "Aprendizados", badge: pendentes || undefined },
     { id: "versoes",      label: "Versões" },
+    { id: "configuracao", label: "Configuração" },
   ]
 
   return (
@@ -571,6 +689,7 @@ export default function AgenteDetalhe() {
         {activeTab === "prompt"       && <TabPrompt       agente={agente} onSaved={loadAgente} />}
         {activeTab === "aprendizados" && <TabAprendizados agente={agente} />}
         {activeTab === "versoes"      && <TabVersoes      agente={agente} />}
+        {activeTab === "configuracao" && <TabConfig       agente={agente} onSaved={loadAgente} />}
       </div>
     </div>
   )
