@@ -574,19 +574,19 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   }, [conv.jid])
 
   // Gera sugestão quando a última mensagem for do cliente
-  const gerarSugestao = useCallback(async (msgs: Message[]) => {
+  const gerarSugestao = useCallback(async (msgs: Message[], forcar = false) => {
     if (msgs.length === 0) return
     const ultima = msgs[msgs.length - 1]
-    // Só gera se a última mensagem for do cliente e for nova
-    if (ultima.from_me || ultima.id === lastMsgId.current) return
-    lastMsgId.current = ultima.id
+    // Só gera se a última mensagem for do cliente e for nova (a não ser que seja forçado)
+    if (!forcar && (ultima.from_me || ultima.id === lastMsgId.current)) return
+    if (!forcar) lastMsgId.current = ultima.id
     setSugestaoLoading(true)
     setSugestao(null)
     try {
       const res = await fetch("/api/chat/sugestao", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jid: conv.jid, instance: conv.instance }),
+        body: JSON.stringify({ jid: conv.jid, instance: conv.instance, forcar }),
       })
       const data = await res.json() as { sugestao?: string; agente_nome?: string; motivo?: string }
       if (data.sugestao) {
@@ -734,12 +734,32 @@ function MessagesArea({ conv }: { conv: Conversation }) {
                 </div>
               )}
             </div>
+            {/* Botão recarregar sugestão */}
+            <button
+              onClick={() => gerarSugestao(messages, true)}
+              disabled={sugestaoLoading}
+              title="Gerar nova sugestão"
+              style={{ width: 28, height: 28, borderRadius: "50%", background: "#ede9fe", border: "1px solid #e9d5ff", color: "#7c3aed", fontSize: 12, cursor: "pointer", flexShrink: 0, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              ↺
+            </button>
             {sugestao && (
               <button onClick={() => setSugestao(null)}
                 style={{ width: 28, height: 28, borderRadius: "50%", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", flexShrink: 0, marginTop: 4 }}>
                 ✕
               </button>
             )}
+          </div>
+        )}
+
+        {/* Botão forçar sugestão quando não há sugestão ativa */}
+        {!sugestao && !sugestaoLoading && (
+          <div style={{ padding: "4px 12px 0", display: "flex", justifyContent: "flex-end" }}>
+            <button
+              onClick={() => gerarSugestao(messages, true)}
+              title="Pedir sugestão do agente"
+              style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#ede9fe", border: "1px solid #e9d5ff", color: "#7c3aed", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              ◆ sugerir resposta
+            </button>
           </div>
         )}
 
