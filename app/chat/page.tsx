@@ -552,13 +552,17 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
 // ─── Área de mensagens ────────────────────────────────────────────────────────
 
 function MessagesArea({ conv }: { conv: Conversation }) {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [text, setText]         = useState("")
-  const [sending, setSending]   = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef  = useRef<HTMLTextAreaElement>(null)
-  const prevLen   = useRef(0)
+  const [messages, setMessages]       = useState<Message[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [text, setText]               = useState("")
+  const [sending, setSending]         = useState(false)
+  const [sugestao, setSugestao]       = useState<string | null>(null)
+  const [sugestaoLoading, setSugestaoLoading] = useState(false)
+  const [agenteNome, setAgenteNome]   = useState<string | null>(null)
+  const bottomRef  = useRef<HTMLDivElement>(null)
+  const inputRef   = useRef<HTMLTextAreaElement>(null)
+  const prevLen    = useRef(0)
+  const lastMsgId  = useRef<string | null>(null)
 
   const loadMessages = useCallback(async () => {
     try {
@@ -569,46 +573,128 @@ function MessagesArea({ conv }: { conv: Conversation }) {
     finally { setLoading(false) }
   }, [conv.jid])
 
-  useEffect(() => { setLoading(true); setMessages([]); loadMessages() }, [conv.jid, loadMessages])
+  // Gera sugestão quando a última mensagem for do cliente
+  const gerarSugestao = useCallback(async (msgs: Message[]) => {
+    if (msgs.length === 0) return
+    const ultima = msgs[msgs.length - 1]
+    // Só gera se a última mensagem for do cliente e for nova
+    if (ultima.from_me || ultima.id === lastMsgId.current) return
+    lastMsgId.current = ultima.id
+    setSugestaoLoading(true)
+    setSugestao(null)
+    try {
+      const res = await fetch("/api/chat/sugestao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jid: conv.jid, instance: conv.instance }),
+      })
+      const data = await res.json() as { sugestao?: string; agente_nome?: string; motivo?: string }
+      if (data.sugestao) {
+        setSugestao(data.sugestao)
+        setAgenteNome(data.agente_nome ?? null)
+      }
+    } catch { /* silencioso */ }
+    finally { setSugestaoLoading(false) }
+  }, [conv.jid, conv.instance])
 
   useEffect(() => {
-    if (messages.length > prevLen.current)
+    setLoading(true); setMessages([]); setSugestao(null); lastMsgId.current = null
+    loadMessages()
+  }, [conv.jid, loadMessages])
+
+  useEffect(() => {
+    if (messages.length > prevLen.current) {
       bottomRef.current?.scrollIntoView({ behavior: messages.length === prevLen.current + 1 ? "smooth" : "auto" })
+      gerarSugestao(messages)
+    }
     prevLen.current = messages.length
-  }, [messages.length])
+  }, [messages.length, messages, gerarSugestao])
 
   useEffect(() => { const t = setInterval(loadMessages, 3000); return () => clearInterval(t) }, [loadMessages])
 
-  async function handleSend() {
-    const t = text.trim()
-    if (!t || sending) return
-    setSending(true); setText("")
-    const tempMsg: Message = { id: `temp_${Date.now()}`, jid: conv.jid, from_me: true, message_type: "conversation", content: t, media_url: null, status: "PENDING", timestamp: new Date().toISOString() }
+  async function enviar(conteudo: string, ehSugestao: boolean) {
+    if (!conteudo.trim() || sending) return
+    const agenteIdRes = ehSugestao ? null : await buscarAgenteId()
+
+    setSending(true); setText(""); setSugestao(null)
+    const tempMsg: Message = {
+      id: `temp_${Date.now()}`, jid: conv.jid, from_me: true,
+      message_type: "conversation", content: conteudo,
+      media_url: null, status: "PENDING", timestamp: new Date().toISOString(),
+    }
     setMessages(prev => [...prev, tempMsg])
+
     try {
-      await fetch("/api/chat/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jid: conv.jid, text: t }) })
+      await fetch("/api/chat/send", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jid: conv.jid, text: conteudo }),
+      })
+
+      // Registra aprendizado se você digitou algo diferente da sugestão
+      if (!ehSugestao && sugestao && sugestao !== conteudo && agenteIdRes) {
+        fetch("/api/chat/aprendizado", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agente_id: agenteIdRes,
+            jid: conv.jid,
+            instance: conv.instance,
+            sugestao_ia: sugestao,
+            resposta_real: conteudo,
+          }),
+        }).catch(() => {})
+      }
+
       await loadMessages()
     } catch { /* silencioso */ }
     finally { setSending(false) }
+  }
+
+  async function buscarAgenteId(): Promise<number | null> {
+    try {
+      const res = await fetch("/api/chat/sugestao", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jid: conv.jid, instance: conv.instance, apenas_id: true }),
+      })
+      const data = await res.json() as { agente_id?: number }
+      return data.agente_id ?? null
+    } catch { return null }
+  }
+
+  async function handleSend() {
+    // Campo vazio → envia sugestão; com texto → envia o texto
+    if (!text.trim() && sugestao) {
+      await enviar(sugestao, true)
+    } else if (text.trim()) {
+      await enviar(text.trim(), false)
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
+  const botaoAtivo = text.trim() || sugestao
+
   let lastDate = ""
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+
+      {/* Header */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, background: "#f0f2f5" }}>
         <Avatar name={conv.profile_name ?? formatJid(conv.jid)} pic={conv.profile_pic_url} size={38} />
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{conv.profile_name ?? formatJid(conv.jid)}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>+{formatJid(conv.jid)}</div>
         </div>
-        {conv.shadow_mode && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "#7c3aed22", color: "#7c3aed", fontWeight: 600, border: "1px solid #7c3aed33" }}>◆ sombra</span>}
+        {conv.shadow_mode && agenteNome && (
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "#7c3aed22", color: "#7c3aed", fontWeight: 600, border: "1px solid #7c3aed33" }}>
+            ◆ {agenteNome}
+          </span>
+        )}
       </div>
 
+      {/* Mensagens */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0", background: "#e5ddd5" }}>
         {loading && <div style={{ textAlign: "center", padding: 40, color: "#888", fontSize: 13 }}>Carregando mensagens...</div>}
         {!loading && messages.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "#888", fontSize: 13 }}>Nenhuma mensagem ainda.</div>}
@@ -626,20 +712,60 @@ function MessagesArea({ conv }: { conv: Conversation }) {
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ padding: "10px 12px", borderTop: "1px solid var(--border)", background: "#f0f2f5", display: "flex", alignItems: "flex-end", gap: 8 }}>
-        <textarea
-          ref={inputRef} value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Digite uma mensagem..."
-          rows={1}
-          style={{ flex: 1, resize: "none", borderRadius: 24, padding: "10px 16px", fontSize: 13, background: "#fff", border: "none", maxHeight: 120, lineHeight: 1.5, overflowY: "auto", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
-          onInput={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px" }}
-        />
-        <button onClick={handleSend} disabled={!text.trim() || sending}
-          style={{ width: 42, height: 42, borderRadius: "50%", background: text.trim() ? "#16a34a" : "#ccc", border: "none", color: "#fff", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}>
-          ➤
-        </button>
+      {/* Área de input com modo sombra */}
+      <div style={{ background: "#f0f2f5", borderTop: "1px solid var(--border)" }}>
+
+        {/* Campo de sugestão do agente */}
+        {(sugestao || sugestaoLoading) && (
+          <div style={{ padding: "8px 12px 4px", display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <div style={{ flex: 1, background: "#fff", borderRadius: 16, padding: "8px 14px", border: "1px solid #e9d5ff", minHeight: 36, position: "relative" }}>
+              <div style={{ fontSize: 9, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 3 }}>
+                ◆ SUGESTÃO DO AGENTE {agenteNome ? `· ${agenteNome}` : ""}
+              </div>
+              {sugestaoLoading ? (
+                <div style={{ fontSize: 12, color: "#c4b5fd", fontStyle: "italic" }}>Gerando sugestão...</div>
+              ) : (
+                <div
+                  onClick={() => sugestao && setText(sugestao)}
+                  style={{ fontSize: 13, color: "#6d28d9", lineHeight: 1.5, cursor: "pointer", fontStyle: "italic" }}
+                  title="Clique para editar no campo de texto"
+                >
+                  {sugestao}
+                </div>
+              )}
+            </div>
+            {sugestao && (
+              <button onClick={() => setSugestao(null)}
+                style={{ width: 28, height: 28, borderRadius: "50%", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", flexShrink: 0, marginTop: 4 }}>
+                ✕
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Input principal */}
+        <div style={{ padding: "8px 12px 10px", display: "flex", alignItems: "flex-end", gap: 8 }}>
+          <textarea
+            ref={inputRef} value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={sugestao ? "Digite para substituir a sugestão, ou Enter para enviar..." : "Digite uma mensagem..."}
+            rows={1}
+            style={{ flex: 1, resize: "none", borderRadius: 24, padding: "10px 16px", fontSize: 13, background: "#fff", border: "none", maxHeight: 120, lineHeight: 1.5, overflowY: "auto", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
+            onInput={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px" }}
+          />
+          <button onClick={handleSend} disabled={!botaoAtivo || sending}
+            style={{ width: 42, height: 42, borderRadius: "50%", background: botaoAtivo ? "#16a34a" : "#ccc", border: "none", color: "#fff", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}>
+            ➤
+          </button>
+        </div>
+
+        {/* Dica modo sombra */}
+        {sugestao && !text.trim() && (
+          <div style={{ fontSize: 10, color: "#7c3aed", textAlign: "center", paddingBottom: 6, opacity: 0.7 }}>
+            Enter envia a sugestão · Clique nela para editar
+          </div>
+        )}
       </div>
     </div>
   )
