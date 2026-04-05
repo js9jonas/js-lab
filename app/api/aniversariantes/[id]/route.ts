@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
 
 // PATCH /api/aniversariantes/[id]
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id   = Number(params.id)
+    const { id: rawId } = await params
+    const id   = Number(rawId)
     const body = await req.json()
     const { nome, telefone, data_nasc, grupo, ativo, observacao } = body
 
@@ -40,9 +41,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/aniversariantes/[id]
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = Number(params.id)
+    const { id: rawId } = await params
+    const id = Number(rawId)
     await query("DELETE FROM lab.aniversariantes WHERE id = $1", [id])
     return NextResponse.json({ ok: true })
   } catch (err) {
