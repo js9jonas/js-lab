@@ -80,10 +80,10 @@ export default function DashboardPage() {
         {stats && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
             {[
-              { label: "Conversas",         value: stats.conversas_ativas,       color: "#16a34a" },
-              { label: "Agentes ativos",     value: stats.agentes_ativos,         color: "#7c3aed" },
-              { label: "Aprendizados",       value: stats.aprendizados_pendentes, color: "#d97706" },
-              { label: "Msgs recentes",      value: stats.mensagens_hoje,         color: "#2563eb" },
+              { label: "Conversas", value: stats.conversas_ativas, color: "#16a34a" },
+              { label: "Agentes ativos", value: stats.agentes_ativos, color: "#7c3aed" },
+              { label: "Aprendizados", value: stats.aprendizados_pendentes, color: "#d97706" },
+              { label: "Msgs recentes", value: stats.mensagens_hoje, color: "#2563eb" },
             ].map(m => (
               <div key={m.label} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ fontSize: 24, fontWeight: 700, color: m.color }}>{m.value}</div>
@@ -97,11 +97,18 @@ export default function DashboardPage() {
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.07em", marginBottom: 14 }}>ACESSO RÁPIDO</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-            <NavCard href="/chat"      icon="◫" color="#16a34a" label="Chat"        desc="Conversas em tempo real com clientes via WhatsApp" />
-            <NavCard href="/mensagens" icon="◈" color="#22c55e" label="Mensagens"   desc="Feed de webhooks recebidos com classificação e logs" />
-            <NavCard href="/agentes"   icon="◆" color="#7c3aed" label="Agentes IA"  desc="Gerenciar agentes, módulos e chat de refinamento"
+            <NavCard href="/chat" icon="◫" color="#16a34a" label="Chat" desc="Conversas em tempo real com clientes via WhatsApp" />
+            <NavCard href="/mensagens" icon="◈" color="#22c55e" label="Mensagens" desc="Feed de webhooks recebidos com classificação e logs" />
+            <NavCard href="/agentes" icon="◆" color="#7c3aed" label="Agentes IA" desc="Gerenciar agentes, módulos e chat de refinamento"
               badge={stats?.aprendizados_pendentes || undefined} />
-            <NavCard href="/evolution" icon="◉" color="#14b8a6" label="Instâncias"  desc="Gerenciar instâncias WhatsApp e configurar webhooks" />
+            <NavCard href="/evolution" icon="◉" color="#14b8a6" label="Instâncias" desc="Gerenciar instâncias WhatsApp e configurar webhooks" />
+            <NavCard
+              href="/aniversariantes"
+              icon="🎂"
+              color="#d97706"
+              label="Aniversariantes"
+              desc="Cadastro e envio de mensagens de aniversário via WhatsApp"
+            />
           </div>
         </div>
 

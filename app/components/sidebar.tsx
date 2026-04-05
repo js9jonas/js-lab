@@ -8,9 +8,10 @@ const NAV = [
   {
     group: "Principal",
     items: [
-      { href: "/",          label: "Dashboard",  icon: "⬡", color: "#3b82f6" },
-      { href: "/mensagens", label: "Mensagens",  icon: "◈", color: "#22c55e" },
-      { href: "/chat",      label: "Chat",       icon: "◫", color: "#16a34a" },
+      { href: "/", label: "Dashboard", icon: "⬡", color: "#3b82f6" },
+      { href: "/mensagens", label: "Mensagens", icon: "◈", color: "#22c55e" },
+      { href: "/chat", label: "Chat", icon: "◫", color: "#16a34a" },
+      { href: "/aniversariantes", label: "Aniversariantes", icon: "🎂", color: "#d97706" }, // ← adicionar
     ],
   },
   {
@@ -22,14 +23,14 @@ const NAV = [
   {
     group: "Agentes IA",
     items: [
-      { href: "/agentes",   label: "Agentes",    icon: "◆", color: "#7c3aed" },
+      { href: "/agentes", label: "Agentes", icon: "◆", color: "#7c3aed" },
     ],
   },
   {
     group: "Em breve",
     items: [
-      { href: "/recibo",    label: "Recibo PDF", icon: "◫", color: "#f59e0b", soon: true },
-      { href: "/ocr",       label: "OCR",        icon: "◎", color: "#f59e0b", soon: true },
+      { href: "/recibo", label: "Recibo PDF", icon: "◫", color: "#f59e0b", soon: true },
+      { href: "/ocr", label: "OCR", icon: "◎", color: "#f59e0b", soon: true },
     ],
   },
 ]
@@ -83,7 +84,7 @@ export default function Sidebar() {
       <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)" }}>
         <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 8, fontWeight: 600, letterSpacing: "0.07em" }}>SISTEMA</div>
         <StatusDot label="Evolution API" checkUrl="/api/evolution/instance/fetchInstances" />
-        <StatusDot label="PostgreSQL"    checkUrl="/api/lab/logs?limit=1" />
+        <StatusDot label="PostgreSQL" checkUrl="/api/lab/logs?limit=1" />
       </div>
     </aside>
   )
