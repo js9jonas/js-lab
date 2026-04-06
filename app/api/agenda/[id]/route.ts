@@ -2,7 +2,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { pool } from "@/lib/db"
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+type RouteContext = {
+  params: Promise<{ id: string }>
+}
+
+export async function PUT(req: NextRequest, context: RouteContext) {
+  const { id } = await context.params
+
   const body = await req.json()
   const {
     titulo, descricao, data, hora, hora_fim,
@@ -23,17 +29,28 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       ativo         = $10,
       atualizado_em = NOW()
     WHERE id = $11`,
-    [titulo, descricao || null, data,
-     hora || '', hora_fim || '',
-     local || '', id_categoria || null,
-     epoca_costume || '', observacoes || '',
-     ativo ?? true, params.id]
+    [
+      titulo,
+      descricao || null,
+      data,
+      hora || '',
+      hora_fim || '',
+      local || '',
+      id_categoria || null,
+      epoca_costume || '',
+      observacoes || '',
+      ativo ?? true,
+      id,
+    ]
   )
 
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  await pool.query("DELETE FROM lab.eventos WHERE id = $1", [params.id])
+export async function DELETE(_req: NextRequest, context: RouteContext) {
+  const { id } = await context.params
+
+  await pool.query("DELETE FROM lab.eventos WHERE id = $1", [id])
+
   return NextResponse.json({ ok: true })
 }
