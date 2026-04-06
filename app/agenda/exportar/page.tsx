@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
                "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
@@ -37,7 +38,7 @@ function getDaysInMonth(ano: number, mes: number) {
   return new Date(ano, mes + 1, 0).getDate()
 }
 
-export default function AgendaExportarPage() {
+function PageContent() {
   const params = useSearchParams()
   const now = new Date()
   const [ano, setAno] = useState(Number(params.get("ano") ?? now.getFullYear()))
@@ -281,6 +282,14 @@ export default function AgendaExportarPage() {
         </div>
       )}
     </>
+  )
+}
+
+export default function AgendaExportarPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>Carregando...</div>}>
+      <PageContent />
+    </Suspense>
   )
 }
 
