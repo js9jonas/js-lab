@@ -11,7 +11,8 @@ const NAV = [
       { href: "/", label: "Dashboard", icon: "⬡", color: "#3b82f6" },
       { href: "/mensagens", label: "Mensagens", icon: "◈", color: "#22c55e" },
       { href: "/chat", label: "Chat", icon: "◫", color: "#16a34a" },
-      { href: "/aniversariantes", label: "Aniversariantes", icon: "🎂", color: "#d97706" }, // ← adicionar
+      { href: "/aniversariantes", label: "Aniversariantes", icon: "🎂", color: "#d97706" },
+      { href: "/agenda", label: "Agenda", icon: "◷", color: "#f59e0b" },
     ],
   },
   {
