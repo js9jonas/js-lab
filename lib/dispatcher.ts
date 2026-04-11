@@ -3,7 +3,6 @@
 // Ponto central de extensão: para adicionar um novo handler, basta registrar aqui
 
 import type { EvolutionPayload, ClassificationResult, HandlerResult } from "./types"
-import { handleComprovantePix } from "./handlers/comprovante-pix"
 import { handleComando } from "./handlers/comando"
 
 export async function dispatch(
@@ -21,7 +20,8 @@ export async function dispatch(
 
   switch (kind) {
     case "comprovante_pix":
-      return handleComprovantePix(payload, dryRun)
+      console.log("[dispatcher] comprovante_pix — handler desativado")
+      return { success: true, action: "comprovante_pix_desativado" }
 
     case "comando":
       return handleComando(payload, dryRun)
