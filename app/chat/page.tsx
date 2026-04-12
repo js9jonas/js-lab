@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import type { ContactInfo } from "@/app/api/chat/contact/route"
+import type { GroupMetadata } from "@/app/api/chat/group-metadata/route"
+import AudioPlayer from "@/components/chat/AudioPlayer"
+import ImageLightbox from "@/components/chat/ImageLightbox"
+import ImagePreview, { fileToAttachment, type ImageAttachment } from "@/components/chat/ImagePreview"
+import PdfPreview from "@/components/chat/PdfPreview"
+import StickerBubble from "@/components/chat/StickerBubble"
+import StickerPreview from "@/components/chat/StickerPreview"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -72,17 +79,63 @@ function scoreColor(score: number) {
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
-function Avatar({ name, pic, size = 40 }: { name?: string | null; pic?: string | null; size?: number }) {
+function Avatar({ name, pic, size = 40, onClick }: { name?: string | null; pic?: string | null; size?: number; onClick?: () => void }) {
   const initials = name ? name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "?"
+  const clickStyle: React.CSSProperties = onClick ? { cursor: "pointer" } : {}
   if (pic) return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={pic} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--border)" }} />
+    <img src={pic} alt="" onClick={onClick} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--border)", ...clickStyle }} />
   )
   return (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, fontWeight: 600, color: "#64748b", flexShrink: 0 }}>
+    <div onClick={onClick} style={{ width: size, height: size, borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, fontWeight: 600, color: "#64748b", flexShrink: 0, ...clickStyle }}>
       {initials}
     </div>
   )
+}
+
+// ─── PhotoOverlay ─────────────────────────────────────────────────────────────
+
+function PhotoOverlay({ src, name, onClose }: { src: string; name: string; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  function download() {
+    const a = document.createElement("a")
+    a.href = src; a.download = name; a.target = "_blank"; a.click()
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,0.88)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
+    >
+      {/* Botões */}
+      <div onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 14, right: 18, display: "flex", gap: 8 }}>
+        <button onClick={download} title="Download" style={photoOverlayBtn}>⬇</button>
+        <button onClick={onClose}  title="Fechar"   style={photoOverlayBtn}>✕</button>
+      </div>
+      {/* Foto */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={name}
+        onClick={e => e.stopPropagation()}
+        style={{ maxWidth: 600, maxHeight: 600, borderRadius: 12, objectFit: "contain", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}
+        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+      />
+      <div onClick={e => e.stopPropagation()} style={{ marginTop: 12, fontSize: 13, color: "#e2e8f0" }}>{name}</div>
+    </div>
+  )
+}
+
+const photoOverlayBtn: React.CSSProperties = {
+  width: 36, height: 36, borderRadius: "50%",
+  background: "rgba(255,255,255,0.15)", border: "none",
+  color: "#fff", fontSize: 14, cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
 }
 
 // ─── Item da lista ────────────────────────────────────────────────────────────
@@ -95,11 +148,15 @@ function ConversationItem({ conv, active, onClick }: { conv: Conversation; activ
       onMouseEnter={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = "var(--bg-hover)" }}
       onMouseLeave={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = "transparent" }}
     >
-      <Avatar name={conv.profile_name ?? formatJid(conv.jid)} pic={conv.profile_pic_url} size={44} />
+      {(() => {
+        const isGroup    = conv.jid.endsWith("@g.us")
+        const displayName = conv.profile_name ?? (isGroup ? "Grupo" : formatJid(conv.jid))
+        return <Avatar name={displayName} pic={conv.profile_pic_url} size={44} />
+      })()}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
           <span style={{ fontWeight: conv.unread_count > 0 ? 600 : 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
-            {conv.profile_name ?? formatJid(conv.jid)}
+            {conv.profile_name ?? (conv.jid.endsWith("@g.us") ? "Grupo" : formatJid(conv.jid))}
           </span>
           <span style={{ fontSize: 10, color: conv.unread_count > 0 ? "#16a34a" : "var(--text-muted)", flexShrink: 0 }}>
             {conv.last_message_at ? formatTime(conv.last_message_at) : ""}
@@ -122,14 +179,34 @@ function ConversationItem({ conv, active, onClick }: { conv: Conversation; activ
 
 // ─── Balão de mensagem ────────────────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, instance }: { msg: Message; instance: string }) {
   const isMe = msg.from_me
-  const [imgExpanded, setImgExpanded] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [imgError, setImgError]         = useState(false)
+  const [imgRetry, setImgRetry]         = useState(0)
 
   const rawImg = (() => {
     if (msg.message_type !== "imageMessage") return null
+    console.log("[img-debug] msg.id:", msg.id)
+    console.log("[img-debug] msg.media_url:", msg.media_url)
+    console.log("[img-debug] msg.raw type:", typeof msg.raw)
     try {
       const raw = msg.raw as Record<string, unknown>
+      console.log("[img-debug] raw keys:", Object.keys(raw))
+      console.log("[img-debug] raw.mediaUrl existe:", !!raw?.mediaUrl)
+      console.log("[img-debug] raw.mediaUrl início:",
+        typeof raw?.mediaUrl === "string" ? (raw.mediaUrl as string).slice(0, 50) : "não é string")
+    } catch (e) {
+      console.log("[img-debug] erro:", e)
+    }
+    try {
+      const raw = msg.raw as Record<string, unknown>
+      // 1. raw.mediaUrl: base64 data URL (permanente, funciona no browser)
+      const dataUrl = raw?.mediaUrl as string | undefined
+      if (dataUrl) return dataUrl
+      // 2. media_url: CDN URL salva no banco (pode expirar ou exigir auth)
+      if (msg.media_url) return msg.media_url
+      // 3. raw.message.imageMessage.url: CDN URL dentro do raw (último recurso)
       const imgMsg = (raw?.message as Record<string, unknown>)?.imageMessage as Record<string, unknown> | undefined
       return (imgMsg?.url as string) ?? null
     } catch { return null }
@@ -137,44 +214,61 @@ function MessageBubble({ msg }: { msg: Message }) {
 
   return (
     <div style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", marginBottom: 2, padding: "0 12px" }}>
-      <div style={{ maxWidth: "65%", background: isMe ? "#dcf8c6" : "#ffffff", border: "1px solid", borderColor: isMe ? "#b7e4a0" : "#e5e7eb", borderRadius: isMe ? "12px 2px 12px 12px" : "2px 12px 12px 12px", padding: msg.message_type === "imageMessage" ? "4px 4px 8px" : "8px 12px", boxShadow: "0 1px 2px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+      <div style={{ maxWidth: "65%", background: msg.message_type === "stickerMessage" ? "transparent" : isMe ? "#dcf8c6" : "#ffffff", border: msg.message_type === "stickerMessage" ? "none" : "1px solid", borderColor: isMe ? "#b7e4a0" : "#e5e7eb", borderRadius: isMe ? "12px 2px 12px 12px" : "2px 12px 12px 12px", padding: msg.message_type === "imageMessage" ? "4px 4px 8px" : msg.message_type === "stickerMessage" ? 0 : "8px 12px", boxShadow: msg.message_type === "stickerMessage" ? "none" : "0 1px 2px rgba(0,0,0,0.06)", overflow: "hidden" }}>
 
         {msg.message_type === "imageMessage" && (
           <div>
-            {rawImg ? (
+            {rawImg && !imgError ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={rawImg} alt="imagem" onClick={() => setImgExpanded(true)} style={{ width: "100%", maxWidth: 280, borderRadius: 8, display: "block", cursor: "zoom-in", objectFit: "cover" }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }} />
-                {imgExpanded && (
-                  <div onClick={() => setImgExpanded(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 500, cursor: "zoom-out" }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={rawImg} alt="expandida" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} />
-                  </div>
+                <img
+                  key={imgRetry}
+                  src={rawImg}
+                  alt="imagem"
+                  onClick={() => setLightboxOpen(true)}
+                  onError={() => setImgError(true)}
+                  style={{ width: "100%", maxWidth: 280, maxHeight: 320, borderRadius: 8, display: "block", cursor: "zoom-in", objectFit: "cover" }}
+                />
+                {lightboxOpen && (
+                  <ImageLightbox src={rawImg} caption={msg.content} onClose={() => setLightboxOpen(false)} />
                 )}
               </>
             ) : (
-              <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-muted)" }}>🖼 Imagem</div>
+              <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🖼</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  {imgError ? "Imagem não disponível" : "Imagem"}
+                </span>
+                {imgError && (
+                  <button
+                    onClick={() => { setImgError(false); setImgRetry(r => r + 1) }}
+                    style={{ fontSize: 11, color: "#3b82f6", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    tentar novamente
+                  </button>
+                )}
+              </div>
             )}
-            {msg.content && <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, padding: "6px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.content}</div>}
+            {rawImg && !imgError && msg.content && (
+              <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, padding: "6px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.content}</div>
+            )}
           </div>
         )}
 
         {msg.message_type === "audioMessage" && (
-          <div style={{ padding: "4px", display: "flex", alignItems: "center", gap: 8, minWidth: 160 }}>
-            <span style={{ fontSize: 18 }}>🎵</span>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Mensagem de voz</div>
-          </div>
+          <AudioPlayer messageId={msg.id} instance={instance} fromMe={isMe} />
         )}
 
         {msg.message_type === "documentMessage" && (
-          <div style={{ padding: "4px 8px", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 18 }}>📄</span>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{msg.content ?? "Documento"}</div>
-          </div>
+          <PdfPreview
+            messageId={msg.id}
+            instance={instance}
+            raw={msg.raw}
+            fromMe={isMe}
+          />
         )}
 
         {msg.message_type === "stickerMessage" && (
-          <div style={{ padding: "4px 8px", fontSize: 12, color: "var(--text-muted)" }}>🪄 Sticker</div>
+          <StickerBubble messageId={msg.id} instance={instance} raw={msg.raw} />
         )}
 
         {(msg.message_type === "conversation" || msg.message_type === "extendedTextMessage") && msg.content && (
@@ -224,12 +318,90 @@ function CollapsibleSection({ title, badge, badgeColor = "#6b7280", defaultOpen 
   )
 }
 
+// ─── Painel de grupo ─────────────────────────────────────────────────────────
+
+function GroupPanel({ conv, onGroupNameResolved }: { conv: Conversation; onGroupNameResolved: (jid: string, name: string) => void }) {
+  const [meta, setMeta]           = useState<GroupMetadata | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [photoOpen, setPhotoOpen] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchMeta() {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/chat/group-metadata?instance=${encodeURIComponent(conv.instance)}&jid=${encodeURIComponent(conv.jid)}`)
+        if (!res.ok) throw new Error(`Erro ${res.status}`)
+        const data = await res.json() as GroupMetadata
+        if (cancelled) return
+        setMeta(data)
+        if (data.subject && !conv.profile_name) {
+          onGroupNameResolved(conv.jid, data.subject)
+        }
+      } catch { /* silencioso */ }
+      finally { if (!cancelled) setLoading(false) }
+    }
+    fetchMeta()
+    return () => { cancelled = true }
+  }, [conv.jid, conv.instance, conv.profile_name, onGroupNameResolved])
+
+  const displayName = conv.profile_name ?? meta?.subject ?? formatJid(conv.jid)
+  const picUrl      = meta?.pictureUrl ?? conv.profile_pic_url
+
+  return (
+    <div style={{ width: 280, borderLeft: "1px solid var(--border)", background: "var(--bg-surface)", display: "flex", flexDirection: "column", overflowY: "auto", flexShrink: 0 }}>
+
+      {/* Header */}
+      <div style={{ padding: "20px 16px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, background: "var(--bg-elevated)" }}>
+        <Avatar
+          name={displayName}
+          pic={picUrl}
+          size={64}
+          onClick={picUrl ? () => setPhotoOpen(true) : undefined}
+        />
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>
+            {loading && !conv.profile_name ? "Carregando..." : displayName}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>Grupo</div>
+        </div>
+      </div>
+
+      {/* Metadados */}
+      {!loading && meta && (
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.07em" }}>INFORMAÇÕES</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 90 }}>Participantes</span>
+              <span style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 500 }}>{meta.participantsCount}</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 90 }}>JID</span>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--mono)", wordBreak: "break-all" }}>{conv.jid}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 12, textAlign: "center" }}>Buscando dados do grupo...</div>
+      )}
+
+      {photoOpen && picUrl && (
+        <PhotoOverlay src={picUrl} name={displayName} onClose={() => setPhotoOpen(false)} />
+      )}
+    </div>
+  )
+}
+
 // ─── Coluna direita ───────────────────────────────────────────────────────────
 
 function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpenConversation: (jid: string) => void }) {
   const [info, setInfo]           = useState<ContactInfo | null>(null)
   const [loading, setLoading]     = useState(true)
   const [clienteId, setClienteId] = useState<number | null>(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
 
   const fetchInfo = useCallback(async (cid?: number) => {
     setLoading(true)
@@ -259,11 +431,24 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
 
       {/* Header */}
       <div style={{ padding: "20px 16px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, background: "var(--bg-elevated)" }}>
-        <Avatar name={conv.profile_name ?? formatJid(conv.jid)} pic={info?.profile_pic_url ?? conv.profile_pic_url} size={64} />
+        {(() => {
+          const picUrl = info?.profile_pic_url ?? conv.profile_pic_url
+          return (
+            <Avatar
+              name={conv.profile_name ?? formatJid(conv.jid)}
+              pic={picUrl}
+              size={64}
+              onClick={picUrl ? () => setPhotoOpen(true) : undefined}
+            />
+          )
+        })()}
         <div style={{ textAlign: "center" }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{conv.profile_name ?? formatJid(conv.jid)}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--mono)", marginTop: 2 }}>+{formatJid(conv.jid)}</div>
         </div>
+        {photoOpen && (info?.profile_pic_url ?? conv.profile_pic_url) && (
+          <PhotoOverlay src={(info?.profile_pic_url ?? conv.profile_pic_url)!} name={conv.profile_name ?? formatJid(conv.jid)} onClose={() => setPhotoOpen(false)} />
+        )}
 
         {/* Seletor de cliente — aparece só quando há mais de um */}
         {multiplos && info && (
@@ -559,10 +744,17 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   const [sugestao, setSugestao]       = useState<string | null>(null)
   const [sugestaoLoading, setSugestaoLoading] = useState(false)
   const [agenteNome, setAgenteNome]   = useState<string | null>(null)
-  const bottomRef  = useRef<HTMLDivElement>(null)
-  const inputRef   = useRef<HTMLTextAreaElement>(null)
-  const prevLen    = useRef(0)
-  const lastMsgId  = useRef<string | null>(null)
+  const [attachment, setAttachment]     = useState<ImageAttachment | null>(null)
+  const [sendImgError, setSendImgError] = useState<string | null>(null)
+  const [stickerAttachment, setStickerAttachment] = useState<{ dataUrl: string; base64: string } | null>(null)
+  const [sendStickerError, setSendStickerError]   = useState<string | null>(null)
+  const [sendingSt, setSendingSt]                  = useState(false)
+  const bottomRef    = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef    = useRef<HTMLInputElement>(null)
+  const stickerInputRef = useRef<HTMLInputElement>(null)
+  const prevLen      = useRef(0)
+  const lastMsgId    = useRef<string | null>(null)
 
   const loadMessages = useCallback(async () => {
     try {
@@ -673,6 +865,114 @@ function MessagesArea({ conv }: { conv: Conversation }) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
+  const handleFileSelected = useCallback(async (file: File) => {
+    try {
+      const att = await fileToAttachment(file)
+      setSendImgError(null)
+      setAttachment(att)
+    } catch (e) {
+      setSendImgError(String(e))
+    }
+  }, [])
+
+  const enviarImagem = useCallback(async (att: ImageAttachment, caption: string) => {
+    if (sending) return
+    setSending(true); setAttachment(null); setSendImgError(null)
+    const tempId = `temp_${Date.now()}`
+    const tempMsg: Message = {
+      id: tempId, jid: conv.jid, from_me: true,
+      message_type: "imageMessage", content: caption || null,
+      media_url: att.dataUrl, status: "PENDING", timestamp: new Date().toISOString(),
+      raw: { message: { imageMessage: { url: att.dataUrl } } },
+    }
+    setMessages(prev => [...prev, tempMsg])
+    try {
+      const res = await fetch("/api/chat/send-image", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instance: conv.instance, jid: conv.jid, imageBase64: att.base64, mimetype: att.mimetype, caption }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) {
+        setSendImgError(data.error ?? "Falha ao enviar imagem")
+        setAttachment(att)
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+      } else {
+        await loadMessages()
+      }
+    } catch (e) {
+      setSendImgError(String(e))
+      setAttachment(att)
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+    } finally {
+      setSending(false)
+    }
+  }, [sending, conv.instance, conv.jid, loadMessages])
+
+  const handleStickerSelected = useCallback((file: File) => {
+    if (file.type !== "image/webp") {
+      setSendStickerError("Apenas arquivos WebP são suportados")
+      return
+    }
+    if (file.size > 500 * 1024) {
+      setSendStickerError("Sticker deve ter no máximo 500 KB")
+      return
+    }
+    setSendStickerError(null)
+    const reader = new FileReader()
+    reader.onload = e => {
+      const dataUrl = e.target!.result as string
+      const base64  = dataUrl.split(",")[1]
+      setStickerAttachment({ dataUrl, base64 })
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  const enviarSticker = useCallback(async () => {
+    if (!stickerAttachment || sendingSt) return
+    setSendingSt(true); setSendStickerError(null)
+    const tempId = `temp_${Date.now()}`
+    const tempMsg: Message = {
+      id: tempId, jid: conv.jid, from_me: true,
+      message_type: "stickerMessage", content: null,
+      media_url: null, status: "PENDING", timestamp: new Date().toISOString(),
+      raw: { mediaUrl: stickerAttachment.dataUrl },
+    }
+    setMessages(prev => [...prev, tempMsg])
+    try {
+      const res = await fetch("/api/chat/send-sticker", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instance: conv.instance, jid: conv.jid, stickerBase64: stickerAttachment.base64 }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || !data.ok) {
+        setSendStickerError(data.error ?? "Falha ao enviar sticker")
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+      } else {
+        setStickerAttachment(null)
+        await loadMessages()
+      }
+    } catch (e) {
+      setSendStickerError(String(e))
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+    } finally {
+      setSendingSt(false)
+    }
+  }, [stickerAttachment, sendingSt, conv.instance, conv.jid, loadMessages])
+
+  // Colar imagem com Ctrl+V
+  useEffect(() => {
+    async function onPaste(e: ClipboardEvent) {
+      const items = Array.from(e.clipboardData?.items ?? [])
+      const imgItem = items.find(i => i.type.startsWith("image/"))
+      if (!imgItem) return
+      e.preventDefault()
+      const file = imgItem.getAsFile()
+      if (file) await handleFileSelected(file)
+    }
+    document.addEventListener("paste", onPaste)
+    return () => document.removeEventListener("paste", onPaste)
+  }, [handleFileSelected])
+
   const botaoAtivo = text.trim() || sugestao
 
   let lastDate = ""
@@ -705,7 +1005,7 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           return (
             <div key={msg.id}>
               {showDate && <DateSeparator date={msg.timestamp} />}
-              <MessageBubble msg={msg} />
+              <MessageBubble msg={msg} instance={conv.instance} />
             </div>
           )
         })}
@@ -763,8 +1063,76 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           </div>
         )}
 
+        {/* Preview de imagem pré-envio */}
+        {attachment && (
+          <ImagePreview
+            attachment={attachment}
+            onSend={enviarImagem}
+            onCancel={() => { setAttachment(null); setSendImgError(null) }}
+            onReplace={setAttachment}
+          />
+        )}
+
+        {/* Toast de erro de envio de imagem */}
+        {sendImgError && !attachment && (
+          <div style={{ padding: "4px 16px 0", fontSize: 11, color: "#dc2626" }}>
+            {sendImgError}
+          </div>
+        )}
+
+        {/* Preview de sticker pré-envio */}
+        {stickerAttachment && (
+          <StickerPreview
+            dataUrl={stickerAttachment.dataUrl}
+            base64={stickerAttachment.base64}
+            onSend={enviarSticker}
+            onCancel={() => { setStickerAttachment(null); setSendStickerError(null) }}
+            sending={sendingSt}
+            error={sendStickerError}
+          />
+        )}
+
+        {/* Toast de erro de sticker sem preview ativo */}
+        {sendStickerError && !stickerAttachment && (
+          <div style={{ padding: "4px 16px 0", fontSize: 11, color: "#dc2626" }}>
+            {sendStickerError}
+          </div>
+        )}
+
+        {/* Input file oculto — imagens */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelected(f); e.target.value = "" }}
+        />
+
+        {/* Input file oculto — sticker WebP */}
+        <input
+          ref={stickerInputRef}
+          type="file"
+          accept=".webp,image/webp"
+          style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleStickerSelected(f); e.target.value = "" }}
+        />
+
         {/* Input principal */}
         <div style={{ padding: "8px 12px 10px", display: "flex", alignItems: "flex-end", gap: 8 }}>
+          {/* Botão de anexo — imagem */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Enviar imagem"
+            style={{ width: 36, height: 36, borderRadius: "50%", background: "transparent", border: "1px solid #d1d5db", color: "#64748b", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer" }}>
+            📎
+          </button>
+          {/* Botão de sticker */}
+          <button
+            onClick={() => stickerInputRef.current?.click()}
+            title="Enviar sticker (WebP)"
+            style={{ width: 36, height: 36, borderRadius: "50%", background: "transparent", border: "1px solid #d1d5db", color: "#64748b", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer" }}>
+            🗒️
+          </button>
           <textarea
             ref={inputRef} value={text}
             onChange={e => setText(e.target.value)}
@@ -823,6 +1191,11 @@ export default function ChatPage() {
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [search, setSearch]     = useState("")
   const [loading, setLoading]   = useState(true)
+
+  const onGroupNameResolved = useCallback((jid: string, name: string) => {
+    setConversations(prev => prev.map(c => c.jid === jid ? { ...c, profile_name: name } : c))
+    setSelected(prev => prev?.jid === jid ? { ...prev, profile_name: name } : prev)
+  }, [])
 
   const loadConversations = useCallback(async () => {
     try {
@@ -887,7 +1260,11 @@ export default function ChatPage() {
       </div>
 
       {/* Coluna direita */}
-      {selected && <ContactPanel key={selected.jid} conv={selected} onOpenConversation={openByJid} />}
+      {selected && (
+        selected.jid.endsWith("@g.us")
+          ? <GroupPanel key={selected.jid} conv={selected} onGroupNameResolved={onGroupNameResolved} />
+          : <ContactPanel key={selected.jid} conv={selected} onOpenConversation={openByJid} />
+      )}
     </div>
   )
 }

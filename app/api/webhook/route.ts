@@ -26,6 +26,10 @@ async function persistChatMessage(payload: EvolutionPayload) {
 
   const pushName = (!fromMe && payload.data?.pushName) ? payload.data.pushName : null
 
+  // URL do CDN do WhatsApp (pequena string, expira em horas — base64 fica no raw)
+  const imgMsg = payload.data?.message?.imageMessage as { url?: string } | undefined
+  const mediaUrl = imgMsg?.url ?? null
+
   // Upsert na conversa
   await query(`
     INSERT INTO lab.conversations (jid, instance, profile_name, last_message, last_message_at, unread_count)
@@ -40,11 +44,12 @@ async function persistChatMessage(payload: EvolutionPayload) {
 
   // Insere mensagem
   await query(`
-    INSERT INTO lab.messages (id, jid, instance, from_me, message_type, content, status, timestamp, raw)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    INSERT INTO lab.messages (id, jid, instance, from_me, message_type, content, media_url, status, timestamp, raw)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ON CONFLICT (id) DO NOTHING
   `, [
     msgId, jid, instance, fromMe, msgType, content,
+    mediaUrl,
     fromMe ? "SENT" : "RECEIVED",
     ts,
     JSON.stringify(payload.data),

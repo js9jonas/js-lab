@@ -13,6 +13,8 @@ export interface MessageRow {
   media_url: string | null
   status: string | null
   timestamp: string
+  raw?: Record<string, unknown> | null
+  reactions?: Record<string, string> | null
 }
 
 type RouteContext = { params: Promise<{ jid: string }> }
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     // 1. Tenta buscar do banco local
     const local = await query<MessageRow>(`
       SELECT id, jid, from_me, message_type, content, media_url, status,
-             timestamp::text
+             timestamp::text, raw, reactions
       FROM lab.messages
       WHERE jid = $1
       ORDER BY timestamp DESC
