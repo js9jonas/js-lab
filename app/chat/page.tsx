@@ -7,6 +7,7 @@ import AudioPlayer from "@/components/chat/AudioPlayer"
 import ImageLightbox from "@/components/chat/ImageLightbox"
 import ImagePreview, { fileToAttachment, type ImageAttachment } from "@/components/chat/ImagePreview"
 import PdfPreview from "@/components/chat/PdfPreview"
+import QuickRepliesModal from "@/components/chat/QuickRepliesModal"
 import StickerBubble from "@/components/chat/StickerBubble"
 import StickerPreview from "@/components/chat/StickerPreview"
 
@@ -23,6 +24,7 @@ interface Conversation {
   is_client: boolean | null
   shadow_mode: boolean
   muted: boolean
+  pinned: boolean
 }
 
 interface Message {
@@ -35,6 +37,7 @@ interface Message {
   status: string | null
   timestamp: string
   raw?: unknown
+  reactions?: Record<string, string> | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -140,37 +143,161 @@ const photoOverlayBtn: React.CSSProperties = {
 
 // ─── Item da lista ────────────────────────────────────────────────────────────
 
-function ConversationItem({ conv, active, onClick }: { conv: Conversation; active: boolean; onClick: () => void }) {
+function ConversationItem({ conv, active, onClick, onPinToggled }: {
+  conv: Conversation
+  active: boolean
+  onClick: () => void
+  onPinToggled: (jid: string, pinned: boolean) => void
+}) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault()
+    setMenu({ x: e.clientX, y: e.clientY })
+  }
+
+  async function togglePin() {
+    setMenu(null)
+    const newVal = !conv.pinned
+    await fetch("/api/chat/pin", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jid: conv.jid, pinned: newVal }),
+    })
+    onPinToggled(conv.jid, newVal)
+  }
+
+  const isGroup    = conv.jid.endsWith("@g.us")
+  const displayName = conv.profile_name ?? (isGroup ? "Grupo" : formatJid(conv.jid))
+
+  return (
+    <>
+      <div
+        onClick={onClick}
+        onContextMenu={handleContextMenu}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", background: active ? "#e8f5e9" : conv.pinned ? "#f0f9ff" : "transparent", borderBottom: "1px solid var(--border)", transition: "background 0.12s", position: "relative" }}
+        onMouseEnter={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = conv.pinned ? "#e0f2fe" : "var(--bg-hover)" }}
+        onMouseLeave={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = conv.pinned ? "#f0f9ff" : "transparent" }}
+      >
+        <Avatar name={displayName} pic={conv.profile_pic_url} size={44} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+            <span style={{ fontWeight: conv.unread_count > 0 ? 600 : 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
+              {displayName}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              {conv.pinned && <span style={{ fontSize: 10, color: "#0ea5e9" }} title="Fixada">📌</span>}
+              <span style={{ fontSize: 10, color: conv.unread_count > 0 ? "#16a34a" : "var(--text-muted)" }}>
+                {conv.last_message_at ? formatTime(conv.last_message_at) : ""}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 170 }}>
+              {conv.last_message ?? "Sem mensagens"}
+            </span>
+            {conv.unread_count > 0 && (
+              <span style={{ background: "#16a34a", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px", flexShrink: 0, marginLeft: 4 }}>
+                {conv.unread_count}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Menu de contexto */}
+      {menu && (
+        <>
+          <div onClick={() => setMenu(null)} style={{ position: "fixed", inset: 0, zIndex: 900 }} />
+          <div style={{ position: "fixed", left: menu.x, top: menu.y, zIndex: 901, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.13)", minWidth: 170, overflow: "hidden" }}>
+            <button
+              onClick={togglePin}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#1a1d23", textAlign: "left" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              <span>{conv.pinned ? "📌" : "📌"}</span>
+              {conv.pinned ? "Desafixar conversa" : "Fixar no topo"}
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ─── Modal de encaminhar ──────────────────────────────────────────────────────
+
+function ForwardModal({ msg, instance, onClose }: { msg: Message; instance: string; onClose: () => void }) {
+  const [convs, setConvs]     = useState<{ jid: string; profile_name: string | null }[]>([])
+  const [search, setSearch]   = useState("")
+  const [sending, setSending] = useState<string | null>(null)
+  const [done, setDone]       = useState<string[]>([])
+
+  useEffect(() => {
+    fetch("/api/chat/conversations")
+      .then(r => r.json())
+      .then((d: { conversations?: { jid: string; profile_name: string | null }[] }) =>
+        setConvs(d.conversations ?? []))
+      .catch(() => {})
+  }, [])
+
+  const filtered = convs.filter(c =>
+    c.jid !== msg.jid &&
+    (c.profile_name ?? formatJid(c.jid)).toLowerCase().includes(search.toLowerCase())
+  )
+
+  async function forward(targetJid: string) {
+    if (sending || done.includes(targetJid)) return
+    setSending(targetJid)
+    await fetch("/api/chat/send", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jid: targetJid, text: msg.content ?? "[mídia]", instance }),
+    })
+    setDone(d => [...d, targetJid])
+    setSending(null)
+  }
+
   return (
     <div
-      onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", background: active ? "#e8f5e9" : "transparent", borderBottom: "1px solid var(--border)", transition: "background 0.12s" }}
-      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = "var(--bg-hover)" }}
-      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = "transparent" }}
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}
     >
-      {(() => {
-        const isGroup    = conv.jid.endsWith("@g.us")
-        const displayName = conv.profile_name ?? (isGroup ? "Grupo" : formatJid(conv.jid))
-        return <Avatar name={displayName} pic={conv.profile_pic_url} size={44} />
-      })()}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-          <span style={{ fontWeight: conv.unread_count > 0 ? 600 : 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
-            {conv.profile_name ?? (conv.jid.endsWith("@g.us") ? "Grupo" : formatJid(conv.jid))}
-          </span>
-          <span style={{ fontSize: 10, color: conv.unread_count > 0 ? "#16a34a" : "var(--text-muted)", flexShrink: 0 }}>
-            {conv.last_message_at ? formatTime(conv.last_message_at) : ""}
-          </span>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: 340, maxHeight: 520, display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+        <div style={{ padding: "14px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Encaminhar mensagem</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#6b7280" }}>✕</button>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 170 }}>
-            {conv.last_message ?? "Sem mensagens"}
-          </span>
-          {conv.unread_count > 0 && (
-            <span style={{ background: "#16a34a", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px", flexShrink: 0, marginLeft: 4 }}>
-              {conv.unread_count}
-            </span>
-          )}
+        <div style={{ padding: "8px 12px" }}>
+          <input
+            autoFocus
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar conversa..."
+            style={{ width: "100%", padding: "7px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+          />
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
+          {filtered.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>Nenhuma conversa encontrada</div>}
+          {filtered.map(c => {
+            const sent = done.includes(c.jid)
+            return (
+              <button
+                key={c.jid}
+                onClick={() => forward(c.jid)}
+                disabled={!!sending || sent}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 16px", background: "none", border: "none", cursor: sent ? "default" : "pointer", textAlign: "left" }}
+                onMouseEnter={e => { if (!sent) (e.currentTarget as HTMLButtonElement).style.background = "#f9fafb" }}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "none"}
+              >
+                <Avatar name={c.profile_name ?? formatJid(c.jid)} size={36} />
+                <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.profile_name ?? formatJid(c.jid)}
+                </span>
+                {sending === c.jid && <span style={{ fontSize: 11, color: "#9ca3af" }}>enviando...</span>}
+                {sent && <span style={{ fontSize: 16, color: "#22c55e" }}>✓</span>}
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>
@@ -179,11 +306,48 @@ function ConversationItem({ conv, active, onClick }: { conv: Conversation; activ
 
 // ─── Balão de mensagem ────────────────────────────────────────────────────────
 
-function MessageBubble({ msg, instance }: { msg: Message; instance: string }) {
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+
+function MessageBubble({ msg, instance, onReply, onForward, onDelete, selectionMode, selected, onToggleSelect }: {
+  msg: Message
+  instance: string
+  onReply: (msg: Message) => void
+  onForward: (msg: Message) => void
+  onDelete: (msg: Message) => void
+  selectionMode: boolean
+  selected: boolean
+  onToggleSelect: (id: string) => void
+}) {
   const isMe = msg.from_me
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [imgError, setImgError]         = useState(false)
   const [imgRetry, setImgRetry]         = useState(0)
+  const [hovered, setHovered]           = useState(false)
+  const [pickerOpen, setPickerOpen]     = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [infoOpen, setInfoOpen]         = useState(false)
+  const [localReactions, setLocalReactions] = useState<Record<string, string> | null>(msg.reactions ?? null)
+
+  async function sendReaction(emoji: string) {
+    setPickerOpen(false)
+    // Update otimista: chave "me" representa minha reação
+    setLocalReactions(prev => {
+      const updated = { ...(prev ?? {}) }
+      if (emoji) updated["me"] = emoji
+      else delete updated["me"]
+      return Object.keys(updated).length > 0 ? updated : null
+    })
+    await fetch("/api/chat/send-reaction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instance, jid: msg.jid, messageId: msg.id, fromMe: msg.from_me, reaction: emoji }),
+    })
+  }
+
+  function toggleMyReaction() {
+    const myEmoji = localReactions?.["me"]
+    sendReaction(myEmoji ? "" : "👍") // remove se já reagiu, adiciona 👍 como toggle rápido
+  }
 
   const rawImg = (() => {
     if (msg.message_type !== "imageMessage") return null
@@ -212,9 +376,135 @@ function MessageBubble({ msg, instance }: { msg: Message; instance: string }) {
     } catch { return null }
   })()
 
+  // Extrai citação do contextInfo (mensagens de reply)
+  const quotedBlock = (() => {
+    try {
+      const raw = msg.raw as Record<string, unknown>
+      const ctx = ((raw?.message as Record<string, unknown>)
+        ?.extendedTextMessage as Record<string, unknown>)
+        ?.contextInfo as Record<string, unknown> | undefined
+      if (!ctx) return null
+      const quotedMsg  = ctx.quotedMessage as Record<string, unknown> | undefined
+      if (!quotedMsg) return null
+      const text =
+        (quotedMsg.conversation as string) ??
+        ((quotedMsg.extendedTextMessage as Record<string, unknown>)?.text as string) ??
+        ((quotedMsg.imageMessage as Record<string, unknown>)?.caption as string) ??
+        null
+      const isImage  = !!quotedMsg.imageMessage
+      const senderName = (ctx._quotedSenderName as string) ?? formatJid(ctx.participant as string ?? "")
+      return { text, isImage, senderName }
+    } catch { return null }
+  })()
+
+  // Agrupa reações: { emoji: count }
+  const reactionSummary = (() => {
+    if (!localReactions) return null
+    const map: Record<string, number> = {}
+    for (const emoji of Object.values(localReactions)) {
+      if (emoji) map[emoji] = (map[emoji] ?? 0) + 1
+    }
+    return Object.keys(map).length > 0 ? map : null
+  })()
+  const myReactionEmoji = localReactions?.["me"] ?? null
+
+  if (infoOpen) return (
+    <div
+      onClick={() => setInfoOpen(false)}
+      style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: 320, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Dados da mensagem</span>
+          <button onClick={() => setInfoOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#6b7280" }}>✕</button>
+        </div>
+        {[
+          ["ID",      msg.id],
+          ["Tipo",    msg.message_type],
+          ["Horário", new Date(msg.timestamp).toLocaleString("pt-BR")],
+          ["Status",  msg.status ?? "—"],
+          ["De",      msg.from_me ? "Você" : formatJid(msg.jid)],
+          ["JID",     msg.jid],
+        ].map(([label, value]) => (
+          <div key={label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, letterSpacing: "0.06em" }}>{label}</span>
+            <span style={{ fontSize: 12, color: "#1a1d23", wordBreak: "break-all", fontFamily: label === "ID" || label === "JID" ? "monospace" : "inherit" }}>{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
   return (
-    <div style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", marginBottom: 2, padding: "0 12px" }}>
-      <div style={{ maxWidth: "65%", background: msg.message_type === "stickerMessage" ? "transparent" : isMe ? "#dcf8c6" : "#ffffff", border: msg.message_type === "stickerMessage" ? "none" : "1px solid", borderColor: isMe ? "#b7e4a0" : "#e5e7eb", borderRadius: isMe ? "12px 2px 12px 12px" : "2px 12px 12px 12px", padding: msg.message_type === "imageMessage" ? "4px 4px 8px" : msg.message_type === "stickerMessage" ? 0 : "8px 12px", boxShadow: msg.message_type === "stickerMessage" ? "none" : "0 1px 2px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+    <div
+      style={{ display: "flex", justifyContent: isMe ? "flex-end" : "flex-start", marginBottom: 2, padding: "0 12px", background: selected ? "rgba(37,99,235,0.07)" : "transparent", transition: "background 0.1s" }}
+      onMouseEnter={() => { if (!selectionMode) setHovered(true) }}
+      onMouseLeave={() => { setHovered(false); setPickerOpen(false); setDropdownOpen(false) }}
+      onClick={() => { if (selectionMode) onToggleSelect(msg.id) }}
+    >
+      {/* Checkbox no modo seleção */}
+      {selectionMode && (
+        <div style={{ display: "flex", alignItems: "center", paddingRight: isMe ? 0 : 8, paddingLeft: isMe ? 8 : 0, order: isMe ? 1 : -1 }}>
+          <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${selected ? "#2563eb" : "#d1d5db"}`, background: selected ? "#2563eb" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer" }}>
+            {selected && <span style={{ color: "#fff", fontSize: 13, lineHeight: 1 }}>✓</span>}
+          </div>
+        </div>
+      )}
+      {/* Inner: botão de reação + balão lado a lado */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, flexDirection: isMe ? "row-reverse" : "row" }}>
+
+        {/* Balão */}
+        <div style={{ maxWidth: "100%", position: "relative", background: msg.message_type === "stickerMessage" ? "transparent" : isMe ? "#dcf8c6" : "#ffffff", border: msg.message_type === "stickerMessage" ? "none" : "1px solid", borderColor: isMe ? "#b7e4a0" : "#e5e7eb", borderRadius: isMe ? "12px 2px 12px 12px" : "2px 12px 12px 12px", padding: msg.message_type === "imageMessage" ? "4px 4px 8px" : msg.message_type === "stickerMessage" ? 0 : "8px 12px", boxShadow: msg.message_type === "stickerMessage" ? "none" : "0 1px 2px rgba(0,0,0,0.06)", overflow: "visible" }}>
+
+        {/* Botão de contexto — canto superior, aparece no hover */}
+        {hovered && !selectionMode && msg.message_type !== "stickerMessage" && (
+          <div style={{ position: "absolute", top: 2, [isMe ? "right" : "left"]: 4, zIndex: 10 }}>
+            {/* gradiente que faz o botão aparecer suavemente sobre o conteúdo */}
+            <div style={{ position: "absolute", top: 0, [isMe ? "right" : "left"]: 0, width: 44, height: 26, background: `linear-gradient(${isMe ? "to right" : "to left"}, ${isMe ? "#dcf8c6" : "#ffffff"} 60%, transparent)`, pointerEvents: "none", borderRadius: 4 }} />
+            <button
+              onClick={e => { e.stopPropagation(); setDropdownOpen(p => !p) }}
+              style={{ position: "relative", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#6b7280", padding: "0 4px", lineHeight: 1, height: 22 }}
+            >
+              ▾
+            </button>
+            {dropdownOpen && (
+              <div
+                style={{ position: "absolute", top: 24, [isMe ? "right" : "left"]: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 170, zIndex: 200, overflow: "hidden" }}
+                onClick={e => e.stopPropagation()}
+              >
+                {[
+                  { label: "Dados da mensagem", icon: "ℹ️", action: () => { setDropdownOpen(false); setInfoOpen(true) } },
+                  { label: "Responder",          icon: "↩️", action: () => { setDropdownOpen(false); onReply(msg) } },
+                  { label: "Encaminhar",         icon: "↪️", action: () => { setDropdownOpen(false); onForward(msg) } },
+                  { label: "Apagar",             icon: "🗑️", action: () => { setDropdownOpen(false); onDelete(msg) }, danger: true },
+                ].map(item => (
+                  <button
+                    key={item.label}
+                    onClick={item.action}
+                    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: (item as { danger?: boolean }).danger ? "#ef4444" : "#1a1d23", textAlign: "left" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                  >
+                    <span>{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bloco de citação (reply) */}
+        {quotedBlock && (
+          <div style={{ borderLeft: `3px solid ${isMe ? "#25d366" : "#2563eb"}`, borderRadius: "4px 6px 6px 4px", background: isMe ? "rgba(0,0,0,0.06)" : "rgba(37,99,235,0.07)", padding: "5px 10px", marginBottom: 6, cursor: "default" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: isMe ? "#128c3e" : "#2563eb", marginBottom: 2 }}>
+              {quotedBlock.senderName}
+            </div>
+            <div style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>
+              {quotedBlock.isImage ? "🖼 Imagem" : (quotedBlock.text ?? "[mídia]")}
+            </div>
+          </div>
+        )}
 
         {msg.message_type === "imageMessage" && (
           <div>
@@ -279,7 +569,57 @@ function MessageBubble({ msg, instance }: { msg: Message; instance: string }) {
           <span style={{ fontSize: 10, color: "#94a3b8" }}>{formatMsgTime(msg.timestamp)}</span>
           {isMe && <span style={{ fontSize: 10, color: msg.status === "READ" ? "#3b82f6" : "#94a3b8" }}>{msg.status === "READ" || msg.status === "DELIVERED" ? "✓✓" : "✓"}</span>}
         </div>
-      </div>
+
+        {/* Reações — aparecem grudadas na borda inferior do balão */}
+        {reactionSummary && (
+          <div style={{ position: "absolute", bottom: -16, [isMe ? "right" : "left"]: 8, display: "flex", gap: 2, zIndex: 1 }}>
+            {Object.entries(reactionSummary).map(([emoji, count]) => {
+              const isMine = myReactionEmoji === emoji
+              return (
+                <button
+                  key={emoji}
+                  onClick={() => sendReaction(isMine ? "" : emoji)}
+                  title={isMine ? "Remover reação" : "Reagir com " + emoji}
+                  style={{ fontSize: 13, background: isMine ? "#dbeafe" : "#fff", border: `1px solid ${isMine ? "#93c5fd" : "#e5e7eb"}`, borderRadius: 99, padding: "1px 6px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", lineHeight: 1.4, cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}
+                >
+                  {emoji}
+                  {count > 1 && <span style={{ fontSize: 10, color: "#6b7280" }}>{count}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        </div>{/* fim balão */}
+
+        {/* Botão de reação — aparece no hover, ao lado do balão */}
+        {hovered && !selectionMode && (
+          <div style={{ position: "relative", alignSelf: "center", flexShrink: 0 }}>
+            <button
+              onClick={() => setPickerOpen(p => !p)}
+              title="Reagir"
+              style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}
+            >
+              😊
+            </button>
+            {pickerOpen && (
+              <div style={{ position: "absolute", bottom: "calc(100% + 6px)", [isMe ? "right" : "left"]: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 24, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", display: "flex", padding: "4px 8px", gap: 4, zIndex: 100, whiteSpace: "nowrap" }}>
+                {REACTION_EMOJIS.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => sendReaction(emoji)}
+                    style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 4px", borderRadius: 8, lineHeight: 1 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#f3f4f6")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>{/* fim inner row */}
     </div>
   )
 }
@@ -734,20 +1074,242 @@ function InfoRow({ label, value, mono }: { label: string; value: string; mono?: 
   )
 }
 
+// ─── Modal de refinamento do agente ──────────────────────────────────────────
+
+interface ModuloSugerido { nome: string; descricao: string | null; gatilhos: string[]; conteudo: string }
+interface ChatRefinMsg   { role: "user" | "assistant"; content: string }
+
+function AgenteRefinamentoModal({ conv, onClose }: { conv: Conversation; onClose: () => void }) {
+  const [msgs, setMsgs]                         = useState<ChatRefinMsg[]>([])
+  const [input, setInput]                       = useState("")
+  const [sending, setSending]                   = useState(false)
+  const [agenteId, setAgenteId]                 = useState<number | null>(null)
+  const [agenteNome, setAgenteNome]             = useState<string | null>(null)
+  const [promptSugerido, setPromptSugerido]     = useState<string | null>(null)
+  const [modulosSugeridos, setModulosSugeridos] = useState<ModuloSugerido[]>([])
+  const [salvandoPrompt, setSalvandoPrompt]     = useState(false)
+  const [salvoPrompt, setSalvoPrompt]           = useState(false)
+  const [erroAgente, setErroAgente]             = useState<string | null>(null)
+  const [erroSalvar, setErroSalvar]             = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs.length])
+
+  async function handleSend() {
+    const txt = input.trim()
+    if (!txt || sending) return
+    setInput("")
+    setSending(true)
+    setMsgs(prev => [...prev, { role: "user", content: txt }])
+    setErroAgente(null)
+    try {
+      const res = await fetch("/api/chat/refinamento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jid: conv.jid, instance: conv.instance, message: txt, historico: msgs }),
+      })
+      const data = await res.json() as {
+        resposta?: string; promptSugerido?: string; modulosSugeridos?: ModuloSugerido[]
+        agente_id?: number; agente_nome?: string; error?: string
+      }
+      if (data.error) { setErroAgente(data.error); setMsgs(prev => prev.slice(0, -1)); return }
+      if (data.resposta)        setMsgs(prev => [...prev, { role: "assistant", content: data.resposta! }])
+      if (data.agente_id)       setAgenteId(data.agente_id)
+      if (data.agente_nome)     setAgenteNome(data.agente_nome)
+      if (data.promptSugerido)  setPromptSugerido(data.promptSugerido)
+      if (data.modulosSugeridos?.length) setModulosSugeridos(prev => [...prev, ...data.modulosSugeridos!])
+    } catch { setErroAgente("Erro de conexão.") }
+    finally { setSending(false) }
+  }
+
+  async function handleSalvarPrompt() {
+    if (!promptSugerido) return
+    if (!agenteId) { setErroSalvar("ID do agente não encontrado. Envie uma mensagem primeiro."); return }
+    setSalvandoPrompt(true); setErroSalvar(null)
+    try {
+      const res = await fetch(`/api/agentes/${agenteId}/prompt`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptSugerido, motivo: "Refinado via chat sobre conversa real" }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || data.error) { setErroSalvar(data.error ?? `Erro HTTP ${res.status}`); return }
+      setSalvoPrompt(true); setPromptSugerido(null)
+      setTimeout(() => setSalvoPrompt(false), 3000)
+    } catch (err) {
+      setErroSalvar("Erro de conexão ao salvar prompt: " + String(err))
+    } finally {
+      setSalvandoPrompt(false)
+    }
+  }
+
+  async function handleSalvarModulo(m: ModuloSugerido, idx: number) {
+    if (!agenteId) { setErroSalvar("ID do agente não encontrado. Envie uma mensagem primeiro."); return }
+    setErroSalvar(null)
+    try {
+      const res = await fetch(`/api/agentes/${agenteId}/modulos`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(m),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok || data.error) { setErroSalvar(data.error ?? `Erro HTTP ${res.status} ao salvar módulo`); return }
+      setModulosSugeridos(prev => prev.filter((_, i) => i !== idx))
+    } catch (err) {
+      setErroSalvar("Erro de conexão ao salvar módulo: " + String(err))
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 16, width: 680, maxWidth: "95vw", maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 48px rgba(0,0,0,0.2)" }}
+      >
+        {/* Header */}
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#0369a1" }}>◇ Refinar agente</div>
+            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+              {agenteNome ? `Agente: ${agenteNome} · ` : ""}Contexto: {conv.profile_name ?? conv.jid}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#6b7280" }}>✕</button>
+        </div>
+
+        {/* Área de scroll */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Prompt sugerido */}
+          {promptSugerido && (
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 14, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#16a34a" }}>◆ Novo prompt base sugerido</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setPromptSugerido(null)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid #bbf7d0", color: "#16a34a", cursor: "pointer" }}>Descartar</button>
+                  <button onClick={handleSalvarPrompt} disabled={salvandoPrompt} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "#16a34a", color: "#fff", border: "none", cursor: "pointer", fontWeight: 600 }}>
+                    {salvandoPrompt ? "..." : salvoPrompt ? "✓ Salvo!" : "✓ Aprovar"}
+                  </button>
+                </div>
+              </div>
+              <pre style={{ fontSize: 11, color: "#166534", background: "#dcfce7", borderRadius: 6, padding: "10px 12px", whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.6, maxHeight: 160, overflowY: "auto" }}>
+                {promptSugerido}
+              </pre>
+            </div>
+          )}
+
+          {/* Módulos sugeridos */}
+          {modulosSugeridos.map((m, idx) => (
+            <div key={idx} style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: 10, padding: 14, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#7c3aed" }}>◇ Módulo sugerido: {m.nome}</span>
+                  {m.descricao && <span style={{ fontSize: 11, color: "#6d28d9", marginLeft: 8 }}>{m.descricao}</span>}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setModulosSugeridos(prev => prev.filter((_, i) => i !== idx))}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid #e9d5ff", color: "#7c3aed", cursor: "pointer" }}>Descartar</button>
+                  <button onClick={() => handleSalvarModulo(m, idx)}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "#7c3aed", color: "#fff", border: "none", cursor: "pointer", fontWeight: 600 }}>✓ Adicionar</button>
+                </div>
+              </div>
+              {m.gatilhos.length > 0 && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+                  {m.gatilhos.map(g => (
+                    <span key={g} style={{ fontSize: 10, padding: "1px 7px", borderRadius: 99, background: "#ede9fe", color: "#7c3aed", border: "1px solid #ddd6fe" }}>{g}</span>
+                  ))}
+                </div>
+              )}
+              <pre style={{ fontSize: 11, color: "#4c1d95", background: "#ede9fe", borderRadius: 6, padding: "10px 12px", whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.6, maxHeight: 160, overflowY: "auto" }}>
+                {m.conteudo}
+              </pre>
+            </div>
+          ))}
+
+          {/* Mensagens do chat */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {msgs.length === 0 && !erroAgente && (
+              <div style={{ textAlign: "center", padding: "32px 20px", color: "#9ca3af", fontSize: 13 }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>◇</div>
+                Converse com o agente sobre esta conversa.<br />
+                Ele analisa as mensagens reais e pode sugerir melhorias no prompt e módulos.
+              </div>
+            )}
+            {erroAgente && (
+              <div style={{ background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#dc2626" }}>
+                {erroAgente}
+              </div>
+            )}
+            {msgs.map((msg, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{ maxWidth: "82%", padding: "10px 14px", borderRadius: msg.role === "user" ? "12px 2px 12px 12px" : "2px 12px 12px 12px", background: msg.role === "user" ? "#0369a1" : "#f8fafc", color: msg.role === "user" ? "#fff" : "#1e293b", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", border: msg.role === "assistant" ? "1px solid #e2e8f0" : "none" }}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {sending && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div style={{ padding: "10px 14px", borderRadius: "2px 12px 12px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#94a3b8", fontSize: 13 }}>Analisando conversa...</div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        {/* Input */}
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+          {erroSalvar && (
+            <div style={{ background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#dc2626", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{erroSalvar}</span>
+              <button onClick={() => setErroSalvar(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 14, padding: "0 4px" }}>✕</button>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+              placeholder="Pergunte sobre a conversa, peça análise, sugira melhorias... (Enter para enviar)"
+              rows={2}
+              style={{ flex: 1, resize: "none", padding: "9px 12px", fontSize: 13, borderRadius: 10, border: "1px solid #e2e8f0", outline: "none", lineHeight: 1.5, fontFamily: "inherit" }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || sending}
+              style={{ width: 40, height: 40, borderRadius: "50%", background: input.trim() && !sending ? "#0369a1" : "#e2e8f0", border: "none", color: input.trim() && !sending ? "#fff" : "#94a3b8", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
+            >
+              ➤
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Área de mensagens ────────────────────────────────────────────────────────
 
 function MessagesArea({ conv }: { conv: Conversation }) {
   const [messages, setMessages]       = useState<Message[]>([])
   const [loading, setLoading]         = useState(true)
   const [text, setText]               = useState("")
+  const [quickReplies, setQuickReplies]           = useState<{ id: number; keyword: string; message: string }[]>([])
+  const [quickRepliesPopup, setQuickRepliesPopup] = useState(false)
+  const [qrFilter, setQrFilter]                   = useState("")
   const [sending, setSending]         = useState(false)
   const [sugestao, setSugestao]       = useState<string | null>(null)
   const [sugestaoLoading, setSugestaoLoading] = useState(false)
   const [agenteNome, setAgenteNome]   = useState<string | null>(null)
+  const [refinamentoOpen, setRefinamentoOpen] = useState(false)
   const [attachment, setAttachment]     = useState<ImageAttachment | null>(null)
   const [sendImgError, setSendImgError] = useState<string | null>(null)
   const [stickerAttachment, setStickerAttachment] = useState<{ dataUrl: string; base64: string } | null>(null)
   const [sendStickerError, setSendStickerError]   = useState<string | null>(null)
+  const [replyTo, setReplyTo]         = useState<Message | null>(null)
+  const [forwardMsg, setForwardMsg]   = useState<Message | null>(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set())
   const [sendingSt, setSendingSt]                  = useState(false)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLTextAreaElement>(null)
@@ -755,12 +1317,23 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   const stickerInputRef = useRef<HTMLInputElement>(null)
   const prevLen      = useRef(0)
   const lastMsgId    = useRef<string | null>(null)
+  const deletedIds   = useRef<Set<string>>(new Set())
+
+  // Carrega quick replies da instância
+  useEffect(() => {
+    fetch(`/api/chat/quick-replies?instance=${encodeURIComponent(conv.instance)}`)
+      .then(r => r.json())
+      .then((d: { quickReplies?: { id: number; keyword: string; message: string }[] }) =>
+        setQuickReplies(d.quickReplies ?? []))
+      .catch(() => {})
+  }, [conv.instance])
 
   const loadMessages = useCallback(async () => {
     try {
       const res  = await fetch(`/api/chat/messages/${encodeURIComponent(conv.jid)}?limit=50`)
       const data = await res.json() as { messages: Message[] }
-      if (Array.isArray(data.messages)) setMessages(data.messages)
+      if (Array.isArray(data.messages))
+        setMessages(data.messages.filter(m => !deletedIds.current.has(m.id)))
     } catch { /* silencioso */ }
     finally { setLoading(false) }
   }, [conv.jid])
@@ -797,29 +1370,83 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   useEffect(() => {
     if (messages.length > prevLen.current) {
       bottomRef.current?.scrollIntoView({ behavior: messages.length === prevLen.current + 1 ? "smooth" : "auto" })
-      gerarSugestao(messages)
     }
     prevLen.current = messages.length
-  }, [messages.length, messages, gerarSugestao])
+  }, [messages.length, messages])
 
   useEffect(() => { const t = setInterval(loadMessages, 3000); return () => clearInterval(t) }, [loadMessages])
+
+  function enterSelectionMode(msg: Message) {
+    setSelectionMode(true)
+    setSelectedIds(new Set([msg.id]))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function cancelSelection() {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+
+  async function deleteSelected() {
+    const toDelete = messages.filter(m => selectedIds.has(m.id))
+    cancelSelection()
+    toDelete.forEach(m => deletedIds.current.add(m.id))
+    setMessages(prev => prev.filter(m => !selectedIds.has(m.id)))
+    await Promise.all(toDelete.map(m =>
+      fetch("/api/chat/delete-message", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instance: conv.instance, jid: conv.jid, messageId: m.id, fromMe: m.from_me }),
+      }).catch(() => {})
+    ))
+  }
 
   async function enviar(conteudo: string, ehSugestao: boolean) {
     if (!conteudo.trim() || sending) return
     const agenteIdRes = ehSugestao ? null : await buscarAgenteId()
 
-    setSending(true); setText(""); setSugestao(null)
+    const replyRef = replyTo
+    setSending(true); setText(""); setSugestao(null); setReplyTo(null)
     const tempMsg: Message = {
       id: `temp_${Date.now()}`, jid: conv.jid, from_me: true,
-      message_type: "conversation", content: conteudo,
+      message_type: replyRef ? "extendedTextMessage" : "conversation", content: conteudo,
       media_url: null, status: "PENDING", timestamp: new Date().toISOString(),
+      // Injeta contextInfo para o bloco de citação aparecer imediatamente no balão
+      raw: replyRef ? {
+        message: {
+          extendedTextMessage: {
+            text: conteudo,
+            contextInfo: {
+              stanzaId: replyRef.id,
+              participant: replyRef.from_me ? conv.jid : conv.jid,
+              quotedMessage: { conversation: replyRef.content ?? "" },
+              _quotedSenderName: replyRef.from_me ? "Você" : (replyRef.jid ? formatJid(replyRef.jid) : ""),
+            },
+          },
+        },
+      } : undefined,
     }
     setMessages(prev => [...prev, tempMsg])
 
     try {
+      const senderName = replyRef ? (replyRef.from_me ? "Você" : formatJid(replyRef.jid)) : undefined
+      const body: Record<string, unknown> = { jid: conv.jid, text: conteudo, instance: conv.instance }
+      if (replyRef) {
+        body.quoted = {
+          key: { remoteJid: conv.jid, fromMe: replyRef.from_me, id: replyRef.id },
+          message: { conversation: replyRef.content ?? "" },
+        }
+        body.quotedSenderName = senderName
+      }
       await fetch("/api/chat/send", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jid: conv.jid, text: conteudo }),
+        body: JSON.stringify(body),
       })
 
       // Registra aprendizado se você digitou algo diferente da sugestão
@@ -862,7 +1489,33 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (quickRepliesPopup) {
+      if (e.key === "Escape") { e.preventDefault(); setQuickRepliesPopup(false); return }
+      if (e.key === "Enter") {
+        const match = quickReplies.filter(r => r.keyword.startsWith(qrFilter.toLowerCase()))
+        if (match.length > 0) { e.preventDefault(); applyQuickReply(match[0]); return }
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  function applyQuickReply(qr: { keyword: string; message: string }) {
+    setText(qr.message)
+    setQuickRepliesPopup(false)
+    setQrFilter("")
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  function handleTextChange(val: string) {
+    setText(val)
+    if (val.startsWith("/")) {
+      const filter = val.slice(1).toLowerCase()
+      setQrFilter(filter)
+      setQuickRepliesPopup(true)
+    } else {
+      setQuickRepliesPopup(false)
+      setQrFilter("")
+    }
   }
 
   const handleFileSelected = useCallback(async (file: File) => {
@@ -994,6 +1647,23 @@ function MessagesArea({ conv }: { conv: Conversation }) {
         )}
       </div>
 
+      {/* Toolbar de seleção múltipla */}
+      {selectionMode && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", background: "#1e3a5f", color: "#fff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={cancelSelection} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0 }}>✕</button>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>{selectedIds.size} selecionada{selectedIds.size !== 1 ? "s" : ""}</span>
+          </div>
+          <button
+            onClick={deleteSelected}
+            disabled={selectedIds.size === 0}
+            style={{ background: selectedIds.size > 0 ? "#ef4444" : "#6b7280", border: "none", color: "#fff", cursor: selectedIds.size > 0 ? "pointer" : "default", borderRadius: 8, padding: "6px 16px", fontSize: 13, fontWeight: 600 }}
+          >
+            Apagar {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
+          </button>
+        </div>
+      )}
+
       {/* Mensagens */}
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 0", background: "#e5ddd5" }}>
         {loading && <div style={{ textAlign: "center", padding: 40, color: "#888", fontSize: 13 }}>Carregando mensagens...</div>}
@@ -1005,15 +1675,44 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           return (
             <div key={msg.id}>
               {showDate && <DateSeparator date={msg.timestamp} />}
-              <MessageBubble msg={msg} instance={conv.instance} />
+              <MessageBubble
+                msg={msg}
+                instance={conv.instance}
+                onReply={setReplyTo}
+                onForward={setForwardMsg}
+                onDelete={enterSelectionMode}
+                selectionMode={selectionMode}
+                selected={selectedIds.has(msg.id)}
+                onToggleSelect={toggleSelect}
+              />
             </div>
           )
         })}
         <div ref={bottomRef} />
       </div>
 
+      {/* Modal de encaminhar */}
+      {forwardMsg && (
+        <ForwardModal msg={forwardMsg} instance={conv.instance} onClose={() => setForwardMsg(null)} />
+      )}
+
       {/* Área de input com modo sombra */}
       <div style={{ background: "#f0f2f5", borderTop: "1px solid var(--border)" }}>
+
+        {/* Barra de resposta */}
+        {replyTo && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px 2px", borderLeft: "3px solid #2563eb", marginLeft: 12, marginRight: 12, marginTop: 6, background: "#eff6ff", borderRadius: "0 6px 6px 0" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: "#2563eb", fontWeight: 600, marginBottom: 1 }}>
+                {replyTo.from_me ? "Você" : formatJid(replyTo.jid)}
+              </div>
+              <div style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {replyTo.content ?? "[mídia]"}
+              </div>
+            </div>
+            <button onClick={() => setReplyTo(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 14, flexShrink: 0 }}>✕</button>
+          </div>
+        )}
 
         {/* Campo de sugestão do agente */}
         {(sugestao || sugestaoLoading) && (
@@ -1051,16 +1750,27 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           </div>
         )}
 
-        {/* Botão forçar sugestão quando não há sugestão ativa */}
+        {/* Botões de agente */}
         {!sugestao && !sugestaoLoading && (
-          <div style={{ padding: "4px 12px 0", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ padding: "4px 12px 0", display: "flex", justifyContent: "flex-end", gap: 6 }}>
             <button
               onClick={() => gerarSugestao(messages, true)}
               title="Pedir sugestão do agente"
               style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#ede9fe", border: "1px solid #e9d5ff", color: "#7c3aed", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
               ◆ sugerir resposta
             </button>
+            <button
+              onClick={() => setRefinamentoOpen(true)}
+              title="Conversar com o agente sobre esta conversa"
+              style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#f0f9ff", border: "1px solid #bae6fd", color: "#0369a1", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              ◇ refinar agente
+            </button>
           </div>
+        )}
+
+        {/* Modal de refinamento do agente */}
+        {refinamentoOpen && (
+          <AgenteRefinamentoModal conv={conv} onClose={() => setRefinamentoOpen(false)} />
         )}
 
         {/* Preview de imagem pré-envio */}
@@ -1117,6 +1827,29 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           onChange={e => { const f = e.target.files?.[0]; if (f) handleStickerSelected(f); e.target.value = "" }}
         />
 
+        {/* Popup de respostas rápidas */}
+        {quickRepliesPopup && (() => {
+          const filtered = quickReplies.filter(r => r.keyword.startsWith(qrFilter))
+          if (filtered.length === 0) return null
+          return (
+            <div style={{ margin: "0 12px 4px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 -4px 16px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+              <div style={{ padding: "6px 12px 4px", fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", borderBottom: "1px solid #f3f4f6" }}>RESPOSTAS RÁPIDAS</div>
+              {filtered.map(qr => (
+                <button
+                  key={qr.id}
+                  onClick={() => applyQuickReply(qr)}
+                  style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", padding: "9px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: "1px solid #f9fafb" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#2563eb", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, padding: "1px 8px", fontFamily: "monospace", flexShrink: 0 }}>/{qr.keyword}</span>
+                  <span style={{ fontSize: 12, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{qr.message}</span>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Input principal */}
         <div style={{ padding: "8px 12px 10px", display: "flex", alignItems: "flex-end", gap: 8 }}>
           {/* Botão de anexo — imagem */}
@@ -1135,7 +1868,7 @@ function MessagesArea({ conv }: { conv: Conversation }) {
           </button>
           <textarea
             ref={inputRef} value={text}
-            onChange={e => setText(e.target.value)}
+            onChange={e => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={sugestao ? "Digite para substituir a sugestão, ou Enter para enviar..." : "Digite uma mensagem..."}
             rows={1}
@@ -1191,6 +1924,8 @@ export default function ChatPage() {
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [search, setSearch]     = useState("")
   const [loading, setLoading]   = useState(true)
+  const [settingsOpen, setSettingsOpen]         = useState(false)
+  const [quickRepliesOpen, setQuickRepliesOpen] = useState(false)
 
   const onGroupNameResolved = useCallback((jid: string, name: string) => {
     setConversations(prev => prev.map(c => c.jid === jid ? { ...c, profile_name: name } : c))
@@ -1217,13 +1952,26 @@ export default function ChatPage() {
     const found = conversations.find(c => c.jid === jid)
     if (found) { setSelected(found); return }
     // Cria entrada temporária se não existir ainda na lista
-    setSelected({ jid, instance: "jsevolution", profile_name: null, profile_pic_url: null, last_message: null, last_message_at: null, unread_count: 0, is_client: null, shadow_mode: true, muted: false })
+    setSelected({ jid, instance: "jsevolution", profile_name: null, profile_pic_url: null, last_message: null, last_message_at: null, unread_count: 0, is_client: null, shadow_mode: true, muted: false, pinned: false })
   }
 
   const filtered = conversations.filter(c => {
     const q = search.toLowerCase()
     return (c.profile_name ?? "").toLowerCase().includes(q) || c.jid.includes(q)
   })
+
+  function handlePinToggled(jid: string, pinned: boolean) {
+    setConversations(prev => {
+      const updated = prev.map(c => c.jid === jid ? { ...c, pinned } : c)
+      // re-sort: pinned first, then by last_message_at desc
+      return [...updated].sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+        const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+        const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+        return tb - ta
+      })
+    })
+  }
 
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
@@ -1233,7 +1981,34 @@ export default function ChatPage() {
         <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid var(--border)", background: "#f0f2f5" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <div style={{ fontWeight: 700, fontSize: 16, color: "#1a1d23" }}>Conversas</div>
-            <ImportButton onImported={loadConversations} />
+            <div style={{ display: "flex", alignItems: "center", gap: 6, position: "relative" }}>
+              <ImportButton onImported={loadConversations} />
+              {/* Botão de configurações */}
+              <button
+                onClick={() => setSettingsOpen(p => !p)}
+                title="Configurações"
+                style={{ width: 28, height: 28, borderRadius: "50%", background: settingsOpen ? "#e2e8f0" : "transparent", border: "1px solid var(--border)", cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}
+              >
+                ⚙️
+              </button>
+              {/* Menu de configurações */}
+              {settingsOpen && (
+                <div
+                  style={{ position: "absolute", top: 34, right: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 200, zIndex: 300, overflow: "hidden" }}
+                  onMouseLeave={() => setSettingsOpen(false)}
+                >
+                  <div style={{ padding: "6px 14px 4px", fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em" }}>CONFIGURAÇÕES</div>
+                  <button
+                    onClick={() => { setSettingsOpen(false); setQuickRepliesOpen(true) }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#1a1d23", textAlign: "left" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                  >
+                    <span>⚡</span> Respostas Rápidas
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar..." style={{ width: "100%", padding: "8px 12px", borderRadius: 24, fontSize: 13, background: "#fff", border: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }} />
         </div>
@@ -1241,7 +2016,7 @@ export default function ChatPage() {
           {loading && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>Carregando...</div>}
           {!loading && filtered.length === 0 && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>{search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}</div>}
           {filtered.map(conv => (
-            <ConversationItem key={conv.jid} conv={conv} active={selected?.jid === conv.jid} onClick={() => setSelected(conv)} />
+            <ConversationItem key={conv.jid} conv={conv} active={selected?.jid === conv.jid} onClick={() => setSelected(conv)} onPinToggled={handlePinToggled} />
           ))}
         </div>
       </div>
@@ -1258,6 +2033,14 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de respostas rápidas */}
+      {quickRepliesOpen && (
+        <QuickRepliesModal
+          instance={selected?.instance ?? conversations[0]?.instance ?? "jsevolution"}
+          onClose={() => setQuickRepliesOpen(false)}
+        />
+      )}
 
       {/* Coluna direita */}
       {selected && (

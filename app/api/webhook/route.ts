@@ -24,7 +24,9 @@ async function persistChatMessage(payload: EvolutionPayload) {
   const content = extractText(payload) || null
   const instance = payload.instance
 
-  const pushName = (!fromMe && payload.data?.pushName) ? payload.data.pushName : null
+  // Para grupos, pushName é o nome do membro — não usar como profile_name do grupo
+  const isGroup  = jid?.endsWith("@g.us") ?? false
+  const pushName = (!fromMe && !isGroup && payload.data?.pushName) ? payload.data.pushName : null
 
   // URL do CDN do WhatsApp (pequena string, expira em horas — base64 fica no raw)
   const imgMsg = payload.data?.message?.imageMessage as { url?: string } | undefined
@@ -79,6 +81,26 @@ export async function POST(req: NextRequest) {
   // 2. Filtra apenas eventos de mensagem (ignora presence, connection etc)
   if (payload.event !== "messages.upsert") {
     return NextResponse.json({ ok: true, skipped: payload.event })
+  }
+
+  // 2b. Reação — persiste e retorna (não passa pelo dispatcher)
+  if (payload.data?.messageType === "reactionMessage") {
+    const reaction = payload.data?.message?.reactionMessage as
+      { key?: { id?: string; fromMe?: boolean }; text?: string } | undefined
+    const targetId  = reaction?.key?.id
+    const emoji     = reaction?.text ?? ""
+    const reactorJid = payload.data?.key?.remoteJid ?? "unknown"
+    const fromMe     = payload.data?.key?.fromMe ?? false
+    const reactorKey = fromMe ? "me" : reactorJid
+
+    if (targetId) {
+      await query(`
+        UPDATE lab.messages
+        SET reactions = COALESCE(reactions, '{}'::jsonb) || jsonb_build_object($1::text, $2::text)
+        WHERE id = $3
+      `, [reactorKey, emoji, targetId]).catch(console.error)
+    }
+    return NextResponse.json({ ok: true, action: "reaction_persisted" })
   }
 
   console.log(`[webhook] ${payload.event} | instance=${payload.instance} | type=${payload.data?.messageType}`)

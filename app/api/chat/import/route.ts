@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const chats = await res.json() as {
       remoteJid: string
       pushName: string | null
+      name?: string | null        // nome do grupo (subject) no Baileys
       profilePicUrl: string | null
       updatedAt: string | null
       lastMessage?: {
@@ -35,9 +36,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Resposta inesperada da Evolution", raw: chats }, { status: 500 })
     }
 
-    // Filtra grupos e status (só contatos individuais)
+    // Filtra status broadcast — inclui contatos (@s.whatsapp.net) e grupos (@g.us)
     const individual = chats.filter(c =>
-      c.remoteJid.endsWith("@s.whatsapp.net")
+      c.remoteJid.endsWith("@s.whatsapp.net") || c.remoteJid.endsWith("@g.us")
     )
 
     let imported = 0
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
         INSERT INTO lab.conversations (jid, instance, profile_name, profile_pic_url, last_message, last_message_at)
         VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (jid) DO UPDATE SET
+          profile_name    = COALESCE($3, lab.conversations.profile_name),
           profile_pic_url = COALESCE($4, lab.conversations.profile_pic_url),
           last_message    = COALESCE($5, lab.conversations.last_message),
           last_message_at = COALESCE($6, lab.conversations.last_message_at),
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
       `, [
         chat.remoteJid,
         INSTANCE,
-        chat.pushName ?? null,
+        chat.name ?? chat.pushName ?? null,
         chat.profilePicUrl ?? null,
         preview,
         chat.updatedAt ?? null,
