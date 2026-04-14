@@ -2106,10 +2106,23 @@ export default function ChatPage() {
     return () => { es?.close(); if (fallback) clearInterval(fallback) }
   }, [loadConversations])
 
+  // Seleciona conversa: atualiza estado, zera badge e envia read receipt
+  function selectConversation(conv: Conversation) {
+    setSelected(conv)
+    if (conv.unread_count > 0) {
+      setConversations(prev => prev.map(c => c.jid === conv.jid ? { ...c, unread_count: 0 } : c))
+      fetch("/api/chat/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jid: conv.jid, instance: conv.instance }),
+      }).catch(() => {})
+    }
+  }
+
   // Abre conversa por JID (usado pelo botão de indicação)
   function openByJid(jid: string) {
     const found = conversations.find(c => c.jid === jid)
-    if (found) { setSelected(found); return }
+    if (found) { selectConversation(found); return }
     // Cria entrada temporária se não existir ainda na lista
     setSelected({ jid, instance: "jsevolution", profile_name: null, profile_pic_url: null, last_message: null, last_message_at: null, unread_count: 0, is_client: null, shadow_mode: true, muted: false, pinned: false })
   }
@@ -2175,7 +2188,7 @@ export default function ChatPage() {
           {loading && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>Carregando...</div>}
           {!loading && filtered.length === 0 && <div style={{ padding: 20, color: "var(--text-muted)", fontSize: 13, textAlign: "center" }}>{search ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}</div>}
           {filtered.map(conv => (
-            <ConversationItem key={conv.jid} conv={conv} active={selected?.jid === conv.jid} onClick={() => setSelected(conv)} onPinToggled={handlePinToggled} />
+            <ConversationItem key={conv.jid} conv={conv} active={selected?.jid === conv.jid} onClick={() => selectConversation(conv)} onPinToggled={handlePinToggled} />
           ))}
         </div>
       </div>
