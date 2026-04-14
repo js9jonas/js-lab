@@ -8,6 +8,7 @@ import { useParams } from "next/navigation"
 interface AgenteDetalhe {
   id: number; nome: string; descricao: string | null
   prompt_base: string; prompt_atual: string; ativo: boolean
+  analisado_ate: string | null
   instancias: { instance: string; ativo: boolean }[]
   versoes: { versao: number; motivo: string | null; criado_em: string }[]
   aprendizados: {
@@ -339,10 +340,12 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
   const [msgs, setMsgs]           = useState<ChatMsg[]>([])
   const [input, setInput]         = useState("")
   const [sending, setSending]     = useState(false)
+  const [analisando, setAnalisando] = useState(false)
   const [promptSugerido, setPromptSugerido]     = useState<string | null>(null)
   const [modulosSugeridos, setModulosSugeridos] = useState<ModuloSugerido[]>([])
   const [salvando, setSalvando]   = useState(false)
   const [salvado, setSalvado]     = useState(false)
+  const [analisadoAte, setAnalisadoAte] = useState<string | null>(agente.analisado_ate)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -397,6 +400,36 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
     setMsgs([]); setPromptSugerido(null); setModulosSugeridos([])
   }
 
+  async function handleAnalisarPadroes() {
+    setAnalisando(true)
+    try {
+      const res = await fetch(`/api/agentes/${agente.id}/analise-multi`, { method: "POST" })
+      const data = await res.json() as {
+        resposta?: string
+        promptSugerido?: string
+        modulosSugeridos?: ModuloSugerido[]
+        conversas_analisadas?: number
+        mensagens_analisadas?: number
+        error?: string
+      }
+      if (data.error) {
+        setMsgs(prev => [...prev, { role: "assistant", content: `Erro na análise: ${data.error}` }])
+      } else if (data.resposta) {
+        const header = data.conversas_analisadas
+          ? `◈ Análise de padrões (${data.conversas_analisadas} conversas, ${data.mensagens_analisadas} mensagens)\n\n`
+          : ""
+        setMsgs(prev => [...prev, { role: "assistant", content: header + data.resposta }])
+        if (data.promptSugerido)      setPromptSugerido(data.promptSugerido)
+        if (data.modulosSugeridos?.length) setModulosSugeridos(data.modulosSugeridos)
+        setAnalisadoAte(new Date().toISOString())
+      }
+    } catch {
+      setMsgs(prev => [...prev, { role: "assistant", content: "Erro ao conectar com a análise multi-conversa." }])
+    } finally {
+      setAnalisando(false)
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
@@ -445,6 +478,28 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
           </pre>
         </div>
       ))}
+
+      {/* Barra de ações */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <button
+          onClick={handleAnalisarPadroes}
+          disabled={analisando || sending}
+          title="Analisa padrões em múltiplas conversas recentes para sugerir melhorias"
+          style={{
+            fontSize: 11, padding: "5px 12px", borderRadius: 99,
+            background: analisando ? "var(--bg-elevated)" : "#f0f9ff",
+            border: "1px solid #bae6fd", color: analisando ? "var(--text-muted)" : "#0369a1",
+            cursor: analisando ? "default" : "pointer", fontWeight: 600,
+            display: "flex", alignItems: "center", gap: 5,
+          }}>
+          {analisando ? "Analisando..." : "◈ Analisar padrões recentes"}
+        </button>
+        {analisadoAte && (
+          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+            última análise: {new Date(analisadoAte).toLocaleDateString("pt-BR")}
+          </span>
+        )}
+      </div>
 
       {/* Mensagens */}
       <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 280, maxHeight: 460, overflowY: "auto", paddingRight: 4 }}>

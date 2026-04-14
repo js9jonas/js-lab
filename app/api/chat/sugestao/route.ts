@@ -107,10 +107,11 @@ export async function POST(req: NextRequest) {
 
     // 4. Monta histórico de mensagens para a API
     // Para imagens na última mensagem, baixa o base64 para o Claude ver
-    const messages: {
+    type ApiMessage = {
       role: "user" | "assistant"
       content: string | { type: string; source?: unknown; text?: string }[]
-    }[] = []
+    }
+    const rawMessages: ApiMessage[] = []
 
     for (const m of mensagensDia) {
       const role = m.from_me ? "assistant" : "user"
@@ -134,22 +135,40 @@ export async function POST(req: NextRequest) {
             },
           ]
           if (caption) contentParts.push({ type: "text", text: caption })
-          messages.push({ role: "user", content: contentParts })
+          rawMessages.push({ role: "user", content: contentParts })
         } else {
-          // Fallback se não conseguir baixar a imagem
-          messages.push({ role, content: caption || "[imagem]" })
+          rawMessages.push({ role, content: caption || "[imagem]" })
         }
         continue
       }
 
       // Imagens anteriores (não a última) → só caption ou placeholder
       if (isImagem) {
-        messages.push({ role, content: m.content ?? "[imagem]" })
+        rawMessages.push({ role, content: m.content ?? "[imagem]" })
         continue
       }
 
       // Texto normal
-      messages.push({ role, content: m.content ?? `[${m.message_type}]` })
+      rawMessages.push({ role, content: m.content ?? `[${m.message_type}]` })
+    }
+
+    // Mescla mensagens consecutivas do mesmo papel (API exige alternância user/assistant)
+    const messages: ApiMessage[] = []
+    for (const msg of rawMessages) {
+      const prev = messages[messages.length - 1]
+      if (prev && prev.role === msg.role && typeof prev.content === "string" && typeof msg.content === "string") {
+        prev.content += "\n" + msg.content
+      } else {
+        messages.push({ ...msg })
+      }
+    }
+    // API não aceita primeira mensagem como "assistant"
+    while (messages.length > 0 && messages[0].role === "assistant") {
+      messages.shift()
+    }
+    // API não aceita última mensagem como "assistant" — adiciona instrução de follow-up
+    if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
+      messages.push({ role: "user", content: "[O atendente quer enviar uma mensagem de follow-up. Sugira o que ele deve dizer agora.]" })
     }
 
     // 5. Chama Claude
@@ -161,7 +180,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 400,
         system: systemPrompt,
         messages,
