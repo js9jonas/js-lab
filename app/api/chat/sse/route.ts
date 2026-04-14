@@ -14,14 +14,17 @@ export async function GET(req: NextRequest) {
       ctrl = c
       addConnection(jid, ctrl)
 
-      // heartbeat a cada 30s para manter conexão viva no Nginx/proxy
+      // Flush imediato: força o Next.js a enviar os headers HTTP agora
+      ctrl.enqueue(new TextEncoder().encode(": connected\n\n"))
+
+      // heartbeat a cada 25s para manter conexão viva no Nginx/proxy
       const heartbeat = setInterval(() => {
         try {
           ctrl.enqueue(new TextEncoder().encode("event: ping\ndata: {}\n\n"))
         } catch {
           clearInterval(heartbeat)
         }
-      }, 30_000)
+      }, 25_000)
 
       req.signal.addEventListener("abort", () => {
         clearInterval(heartbeat)
