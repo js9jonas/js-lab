@@ -192,8 +192,8 @@ export async function POST(req: NextRequest) {
       clienteCtx +
       "\n\n---\nResponda APENAS com o texto da mensagem, sem explicações, sem aspas, sem formatação extra. Será enviado diretamente ao cliente."
 
-    // ── Áudio: sugestão genérica sem chamar a API ────────────────────────────
-    if (ultima.message_type === "audioMessage") {
+    // ── Áudio: usa transcrição se disponível, senão resposta genérica ────────
+    if (ultima.message_type === "audioMessage" && !ultima.content) {
       return NextResponse.json({
         sugestao: "Recebi seu áudio! Vou ouvir e já te retorno 😊",
         agente_id: agente.id,
@@ -242,6 +242,13 @@ export async function POST(req: NextRequest) {
       // Imagens anteriores (não a última) → só caption ou placeholder
       if (isImagem) {
         rawMessages.push({ role, content: m.content ?? "[imagem]" })
+        continue
+      }
+
+      // Áudio com transcrição
+      if (m.message_type === "audioMessage") {
+        const texto = m.content ? `[áudio] ${m.content}` : "[áudio sem transcrição]"
+        rawMessages.push({ role, content: texto })
         continue
       }
 
