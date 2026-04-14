@@ -116,7 +116,17 @@ export async function POST(req: NextRequest) {
 
   // 2. Atualização de status (DELIVERED / READ) — trata antes de converter para EvolutionPayload
   if (raw.event === "messages.update") {
-    console.log(`[webhook] messages.update raw:`, JSON.stringify(raw.data))
+    // Persiste payload completo no banco para debug de formato real
+    await query(`
+      INSERT INTO lab.webhook_logs
+        (received_at, instance, from_jid, message_type, kind, confidence, handler_action, success, detail, raw_payload)
+      VALUES (NOW(), $1, '', 'status_update', 'ignorar', 'alta', 'messages.update', true, $2, $3)
+    `, [
+      raw.instance ?? "",
+      JSON.stringify(raw.data),
+      JSON.stringify(raw),
+    ]).catch(console.error)
+
     const dataArr = Array.isArray(raw.data) ? raw.data : [raw.data]
     for (const upd of dataArr) {
       const item = upd as { key?: { id?: string; remoteJid?: string }; update?: { status?: string | number } }
@@ -131,8 +141,6 @@ export async function POST(req: NextRequest) {
         2: "SENT", 3: "DELIVERED", 4: "READ", 5: "READ",
       }
       const status = rawStatus != null ? (statusMap[rawStatus] ?? String(rawStatus)) : null
-
-      console.log(`[webhook] status update: id=${msgId} jid=${jid} raw=${rawStatus} -> ${status}`)
 
       if (msgId && status) {
         await query(
