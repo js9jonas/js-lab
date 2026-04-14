@@ -116,20 +116,23 @@ export async function POST(req: NextRequest) {
 
   // 2. Atualização de status (DELIVERED / READ) — trata antes de converter para EvolutionPayload
   if (raw.event === "messages.update") {
+    console.log(`[webhook] messages.update raw:`, JSON.stringify(raw.data))
     const dataArr = Array.isArray(raw.data) ? raw.data : [raw.data]
     for (const upd of dataArr) {
-      const item = upd as { key?: { id?: string; remoteJid?: string }; update?: { status?: string } }
-      const msgId    = item?.key?.id
-      const jid      = item?.key?.remoteJid
+      const item = upd as { key?: { id?: string; remoteJid?: string }; update?: { status?: string | number } }
+      const msgId     = item?.key?.id
+      const jid       = item?.key?.remoteJid
       const rawStatus = item?.update?.status
 
-      const statusMap: Record<string, string> = {
-        SERVER_ACK:   "SENT",
-        DELIVERY_ACK: "DELIVERED",
-        READ:         "READ",
-        PLAYED:       "READ",
+      // Evolution pode enviar string ("DELIVERY_ACK") ou número (3)
+      const statusMap: Record<string | number, string> = {
+        SERVER_ACK:   "SENT",   DELIVERY_ACK: "DELIVERED",
+        READ:         "READ",   PLAYED:       "READ",
+        2: "SENT", 3: "DELIVERED", 4: "READ", 5: "READ",
       }
-      const status = rawStatus ? (statusMap[rawStatus] ?? rawStatus) : null
+      const status = rawStatus != null ? (statusMap[rawStatus] ?? String(rawStatus)) : null
+
+      console.log(`[webhook] status update: id=${msgId} jid=${jid} raw=${rawStatus} -> ${status}`)
 
       if (msgId && status) {
         await query(
