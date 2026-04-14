@@ -116,25 +116,27 @@ export async function POST(req: NextRequest) {
 
   // 2. Atualização de status (DELIVERED / READ) — trata antes de converter para EvolutionPayload
   if (raw.event === "messages.update") {
-    // Persiste payload completo no banco para debug de formato real
-    await query(`
-      INSERT INTO lab.webhook_logs
-        (received_at, instance, from_jid, message_type, kind, confidence, handler_action, success, detail, raw_payload)
-      VALUES (NOW(), $1, '', 'status_update', 'ignorar', 'alta', 'messages.update', true, $2, $3)
-    `, [
-      raw.instance ?? "",
-      JSON.stringify(raw.data),
-      JSON.stringify(raw),
-    ]).catch(console.error)
-
+    // Formato real da Evolution v2: raw.data é objeto único (não array)
+    // { keyId, remoteJid, fromMe, status, instanceId, messageId }
     const dataArr = Array.isArray(raw.data) ? raw.data : [raw.data]
     for (const upd of dataArr) {
-      const item = upd as { key?: { id?: string; remoteJid?: string }; update?: { status?: string | number } }
-      const msgId     = item?.key?.id
-      const jid       = item?.key?.remoteJid
-      const rawStatus = item?.update?.status
+      const item = upd as {
+        keyId?: string
+        remoteJid?: string
+        fromMe?: boolean
+        status?: string | number
+      }
+      const msgId     = item?.keyId
+      const rawStatus = item?.status
 
-      // Evolution pode enviar string ("DELIVERY_ACK") ou número (3)
+      // Normaliza JID: remove sufixo de dispositivo "número:XX@s.whatsapp.net"
+      let jid = item?.remoteJid ?? ""
+      if (jid.includes(":") && jid.includes("@s.whatsapp.net")) {
+        jid = jid.replace(/:(\d+)@/, "@")
+      }
+      // Ignora @lid — não temos como resolver sem contexto adicional
+      if (jid.endsWith("@lid")) jid = ""
+
       const statusMap: Record<string | number, string> = {
         SERVER_ACK:   "SENT",   DELIVERY_ACK: "DELIVERED",
         READ:         "READ",   PLAYED:       "READ",
