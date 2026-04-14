@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { getContactName } from "@/lib/contact-lookup"
 import type { ContactInfo } from "@/app/api/chat/contact/route"
 import type { GroupMetadata } from "@/app/api/chat/group-metadata/route"
 import AudioPlayer from "@/components/chat/AudioPlayer"
@@ -167,8 +168,13 @@ function ConversationItem({ conv, active, onClick, onPinToggled }: {
     onPinToggled(conv.jid, newVal)
   }
 
-  const isGroup    = conv.jid.endsWith("@g.us")
-  const displayName = conv.profile_name ?? (isGroup ? "Grupo" : formatJid(conv.jid))
+  const isGroup = conv.jid.endsWith("@g.us")
+  const [contactName, setContactName] = useState<string | null>(null)
+  useEffect(() => {
+    if (isGroup) return
+    getContactName(conv.jid, conv.profile_name).then(setContactName)
+  }, [conv.jid, conv.profile_name, isGroup])
+  const displayName = contactName ?? conv.profile_name ?? (isGroup ? "Grupo" : formatJid(conv.jid))
 
   return (
     <>
@@ -329,15 +335,17 @@ function ForwardModal({ msg, instance, onClose }: { msg: Message; instance: stri
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
-function MessageBubble({ msg, instance, onReply, onForward, onDelete, selectionMode, selected, onToggleSelect }: {
+function MessageBubble({ msg, instance, isGroup, onReply, onForward, onDelete, selectionMode, selected, onToggleSelect, onOpenConversation }: {
   msg: Message
   instance: string
+  isGroup?: boolean
   onReply: (msg: Message) => void
   onForward: (msg: Message) => void
   onDelete: (msg: Message) => void
   selectionMode: boolean
   selected: boolean
   onToggleSelect: (id: string) => void
+  onOpenConversation?: (jid: string) => void
 }) {
   const isMe = msg.from_me
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -348,6 +356,15 @@ function MessageBubble({ msg, instance, onReply, onForward, onDelete, selectionM
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [infoOpen, setInfoOpen]         = useState(false)
   const [localReactions, setLocalReactions] = useState<Record<string, string> | null>(msg.reactions ?? null)
+
+  const participantJid = isGroup && !isMe
+    ? (() => { try { const r = msg.raw as Record<string, unknown>; return ((r?.key as Record<string, unknown>)?.participant as string) ?? (r?.participant as string) ?? null } catch { return null } })()
+    : null
+  const [senderName, setSenderName] = useState<string | null>(null)
+  useEffect(() => {
+    if (!participantJid) return
+    getContactName(participantJid).then(setSenderName)
+  }, [participantJid])
 
   async function sendReaction(emoji: string) {
     setPickerOpen(false)
@@ -515,6 +532,13 @@ function MessageBubble({ msg, instance, onReply, onForward, onDelete, selectionM
           </div>
         )}
 
+        {/* Nome do remetente em grupos */}
+        {isGroup && !isMe && senderName && (
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", marginBottom: 3 }}>
+            {senderName}
+          </div>
+        )}
+
         {/* Bloco de citação (reply) */}
         {quotedBlock && (
           <div style={{ borderLeft: `3px solid ${isMe ? "#25d366" : "#2563eb"}`, borderRadius: "4px 6px 6px 4px", background: isMe ? "rgba(0,0,0,0.06)" : "rgba(37,99,235,0.07)", padding: "5px 10px", marginBottom: 6, cursor: "default" }}>
@@ -581,6 +605,33 @@ function MessageBubble({ msg, instance, onReply, onForward, onDelete, selectionM
         {msg.message_type === "stickerMessage" && (
           <StickerBubble messageId={msg.id} instance={instance} raw={msg.raw} />
         )}
+
+        {msg.message_type === "contactMessage" && (() => {
+          try {
+            const raw = msg.raw as Record<string, unknown>
+            const contactMsg = ((raw?.message as Record<string, unknown>)
+              ?.contactMessage as Record<string, unknown> | undefined)
+            const displayName = (contactMsg?.displayName as string) ?? null
+            const vcard = (contactMsg?.vcard as string) ?? null
+            const phone = vcard?.match(/waid=(\d+):/)?.[1] ?? null
+            const jid = phone ? `${phone}@s.whatsapp.net` : null
+            return (
+              <div
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 2px", minWidth: 160, cursor: jid ? "pointer" : "default" }}
+                onClick={jid && onOpenConversation ? () => onOpenConversation(jid) : undefined}
+                title={jid ? "Abrir conversa" : undefined}
+              >
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                  👤
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: jid ? "#7c3aed" : "#1a1d23" }}>{displayName ?? "Contato"}</div>
+                  {phone && <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--mono)" }}>+{phone}</div>}
+                </div>
+              </div>
+            )
+          } catch { return null }
+        })()}
 
         {(msg.message_type === "conversation" || msg.message_type === "extendedTextMessage") && msg.content && (
           <div style={{ fontSize: 13, color: "#1a1d23", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.content}</div>
@@ -796,7 +847,7 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
           const picUrl = info?.profile_pic_url ?? conv.profile_pic_url
           return (
             <Avatar
-              name={conv.profile_name ?? formatJid(conv.jid)}
+              name={info?.todos_clientes[0]?.nome ?? conv.profile_name ?? formatJid(conv.jid)}
               pic={picUrl}
               size={64}
               onClick={picUrl ? () => setPhotoOpen(true) : undefined}
@@ -804,11 +855,11 @@ function ContactPanel({ conv, onOpenConversation }: { conv: Conversation; onOpen
           )
         })()}
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>{conv.profile_name ?? formatJid(conv.jid)}</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{info?.todos_clientes[0]?.nome ?? conv.profile_name ?? formatJid(conv.jid)}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--mono)", marginTop: 2 }}>+{formatJid(conv.jid)}</div>
         </div>
         {photoOpen && (info?.profile_pic_url ?? conv.profile_pic_url) && (
-          <PhotoOverlay src={(info?.profile_pic_url ?? conv.profile_pic_url)!} name={conv.profile_name ?? formatJid(conv.jid)} onClose={() => setPhotoOpen(false)} />
+          <PhotoOverlay src={(info?.profile_pic_url ?? conv.profile_pic_url)!} name={info?.todos_clientes[0]?.nome ?? conv.profile_name ?? formatJid(conv.jid)} onClose={() => setPhotoOpen(false)} />
         )}
 
         {/* Seletor de cliente — aparece só quando há mais de um */}
@@ -1311,7 +1362,7 @@ function AgenteRefinamentoModal({ conv, onClose }: { conv: Conversation; onClose
 
 // ─── Área de mensagens ────────────────────────────────────────────────────────
 
-function MessagesArea({ conv }: { conv: Conversation }) {
+function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpenConversation?: (jid: string) => void }) {
   const [messages, setMessages]       = useState<Message[]>([])
   const [loading, setLoading]         = useState(true)
   const [text, setText]               = useState("")
@@ -1321,6 +1372,7 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   const [sending, setSending]         = useState(false)
   const [sugestao, setSugestao]       = useState<string | null>(null)
   const [sugestaoLoading, setSugestaoLoading] = useState(false)
+  const [autoSuggest, setAutoSuggest] = useState(false)
   const [agenteNome, setAgenteNome]   = useState<string | null>(null)
   const [refinamentoOpen, setRefinamentoOpen] = useState(false)
   const [attachment, setAttachment]     = useState<ImageAttachment | null>(null)
@@ -1391,11 +1443,41 @@ function MessagesArea({ conv }: { conv: Conversation }) {
   useEffect(() => {
     if (messages.length > prevLen.current) {
       bottomRef.current?.scrollIntoView({ behavior: messages.length === prevLen.current + 1 ? "smooth" : "auto" })
+      if (autoSuggest) gerarSugestao(messages)
     }
     prevLen.current = messages.length
-  }, [messages.length, messages])
+  }, [messages, autoSuggest, gerarSugestao])
 
-  useEffect(() => { const t = setInterval(loadMessages, 3000); return () => clearInterval(t) }, [loadMessages])
+  useEffect(() => {
+    let es: EventSource | null = null
+    let retries = 0
+    let fallback: ReturnType<typeof setInterval> | null = null
+
+    function connect() {
+      es = new EventSource(`/api/chat/sse?jid=${encodeURIComponent(conv.jid)}`)
+
+      es.addEventListener("new_message", (e) => {
+        const msg = JSON.parse((e as MessageEvent).data) as Message
+        if (!deletedIds.current.has(msg.id))
+          setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
+      })
+
+      es.addEventListener("ping", () => { retries = 0 })
+
+      es.onerror = () => {
+        es?.close()
+        retries++
+        if (retries >= 3) {
+          if (!fallback) fallback = setInterval(loadMessages, 10_000)
+        } else {
+          setTimeout(connect, 3_000)
+        }
+      }
+    }
+
+    connect()
+    return () => { es?.close(); if (fallback) clearInterval(fallback) }
+  }, [conv.jid, loadMessages])
 
   function enterSelectionMode(msg: Message) {
     setSelectionMode(true)
@@ -1699,12 +1781,14 @@ function MessagesArea({ conv }: { conv: Conversation }) {
               <MessageBubble
                 msg={msg}
                 instance={conv.instance}
+                isGroup={conv.jid.endsWith("@g.us")}
                 onReply={setReplyTo}
                 onForward={setForwardMsg}
                 onDelete={enterSelectionMode}
                 selectionMode={selectionMode}
                 selected={selectedIds.has(msg.id)}
                 onToggleSelect={toggleSelect}
+                onOpenConversation={onOpenConversation}
               />
             </div>
           )
@@ -1772,22 +1856,30 @@ function MessagesArea({ conv }: { conv: Conversation }) {
         )}
 
         {/* Botões de agente */}
-        {!sugestao && !sugestaoLoading && (
-          <div style={{ padding: "4px 12px 0", display: "flex", justifyContent: "flex-end", gap: 6 }}>
-            <button
-              onClick={() => gerarSugestao(messages, true)}
-              title="Pedir sugestão do agente"
-              style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#ede9fe", border: "1px solid #e9d5ff", color: "#7c3aed", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              ◆ sugerir resposta
-            </button>
-            <button
-              onClick={() => setRefinamentoOpen(true)}
-              title="Conversar com o agente sobre esta conversa"
-              style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#f0f9ff", border: "1px solid #bae6fd", color: "#0369a1", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-              ◇ refinar agente
-            </button>
-          </div>
-        )}
+        <div style={{ padding: "4px 12px 0", display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
+          {!sugestao && !sugestaoLoading && (
+            <>
+              <button
+                onClick={() => gerarSugestao(messages, true)}
+                title="Pedir sugestão do agente"
+                style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#ede9fe", border: "1px solid #e9d5ff", color: "#7c3aed", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                ◆ sugerir resposta
+              </button>
+              <button
+                onClick={() => setRefinamentoOpen(true)}
+                title="Conversar com o agente sobre esta conversa"
+                style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#f0f9ff", border: "1px solid #bae6fd", color: "#0369a1", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                ◇ refinar agente
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setAutoSuggest(p => !p)}
+            title={autoSuggest ? "Desativar sugestão automática" : "Ativar sugestão automática"}
+            style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: autoSuggest ? "#7c3aed" : "#f3f4f6", border: `1px solid ${autoSuggest ? "#6d28d9" : "#e5e7eb"}`, color: autoSuggest ? "#fff" : "#9ca3af", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+            {autoSuggest ? "◆ auto" : "◇ auto"}
+          </button>
+        </div>
 
         {/* Modal de refinamento do agente */}
         {refinamentoOpen && (
@@ -1964,8 +2056,49 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadConversations()
-    const t = setInterval(loadConversations, 5000)
-    return () => clearInterval(t)
+
+    let es: EventSource | null = null
+    let retries = 0
+    let fallback: ReturnType<typeof setInterval> | null = null
+
+    function connect() {
+      es = new EventSource("/api/chat/sse?jid=*")
+
+      es.addEventListener("conversation_update", (e) => {
+        const { jid, last_message, last_message_at, unread_count_delta } =
+          JSON.parse((e as MessageEvent).data) as {
+            jid: string
+            last_message: string | null
+            last_message_at: string
+            unread_count_delta: number
+          }
+        setConversations(prev => prev.map(c =>
+          c.jid !== jid ? c : {
+            ...c,
+            last_message,
+            last_message_at,
+            unread_count: unread_count_delta > 0
+              ? c.unread_count + unread_count_delta
+              : c.unread_count,
+          }
+        ))
+      })
+
+      es.addEventListener("ping", () => { retries = 0 })
+
+      es.onerror = () => {
+        es?.close()
+        retries++
+        if (retries >= 3) {
+          if (!fallback) fallback = setInterval(loadConversations, 30_000)
+        } else {
+          setTimeout(connect, 3_000)
+        }
+      }
+    }
+
+    connect()
+    return () => { es?.close(); if (fallback) clearInterval(fallback) }
   }, [loadConversations])
 
   // Abre conversa por JID (usado pelo botão de indicação)
@@ -2045,7 +2178,7 @@ export default function ChatPage() {
       {/* Mensagens */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {selected ? (
-          <MessagesArea key={selected.jid} conv={selected} />
+          <MessagesArea key={selected.jid} conv={selected} onOpenConversation={openByJid} />
         ) : (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", gap: 12, background: "#e5ddd5" }}>
             <div style={{ fontSize: 48, opacity: 0.4 }}>💬</div>

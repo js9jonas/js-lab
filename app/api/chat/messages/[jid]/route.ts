@@ -92,6 +92,11 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       })
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
+    // Se a Evolution não retornou nada, usa as mensagens locais disponíveis
+    if (messages.length === 0 && local.length > 0) {
+      return NextResponse.json({ source: "local", messages: local.reverse() })
+    }
+
     // Persiste localmente para próximas buscas
     if (messages.length > 0) {
       for (const m of messages) {

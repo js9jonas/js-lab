@@ -8,6 +8,7 @@ import { classify, extractText } from "@/lib/classifier"
 import { dispatch } from "@/lib/dispatcher"
 import { getMediaUrl } from "@/lib/evolution"
 import { logWebhook, query } from "@/lib/db"
+import { emit, emitGlobal } from "@/lib/sse-manager"
 
 // Persiste mensagem recebida nas tabelas do chat
 async function persistChatMessage(payload: EvolutionPayload) {
@@ -76,6 +77,21 @@ async function persistChatMessage(payload: EvolutionPayload) {
     ts,
     JSON.stringify(payload.data),
   ])
+
+  // Emite eventos SSE para clientes conectados
+  emit(jid, "new_message", {
+    id: msgId, jid, from_me: fromMe, message_type: msgType,
+    content, media_url: mediaUrl,
+    status: fromMe ? "SENT" : "RECEIVED",
+    timestamp: ts.toISOString(),
+    raw: payload.data,
+  })
+  emitGlobal("conversation_update", {
+    jid,
+    last_message:       content,
+    last_message_at:    ts.toISOString(),
+    unread_count_delta: fromMe ? 0 : 1,
+  })
 }
 
 // Verificação de segurança via header secret
