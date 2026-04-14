@@ -590,7 +590,14 @@ function MessageBubble({ msg, instance, isGroup, onReply, onForward, onDelete, s
         )}
 
         {msg.message_type === "audioMessage" && (
-          <AudioPlayer messageId={msg.id} instance={instance} fromMe={isMe} />
+          <div>
+            <AudioPlayer messageId={msg.id} instance={instance} fromMe={isMe} />
+            {msg.content && (
+              <div style={{ fontSize: 13, color: isMe ? "#e0f0e0" : "#555", lineHeight: 1.5, padding: "4px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word", fontStyle: "italic" }}>
+                {msg.content}
+              </div>
+            )}
+          </div>
         )}
 
         {msg.message_type === "documentMessage" && (
