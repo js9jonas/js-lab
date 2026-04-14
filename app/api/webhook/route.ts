@@ -107,14 +107,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let payload: EvolutionPayload
+  let raw: Record<string, unknown>
   try {
-    payload = await req.json()
+    raw = await req.json()
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  // 2. Filtra apenas eventos de mensagem (ignora presence, connection etc)
+  // 2. Atualização de status (DELIVERED / READ) — trata antes de converter para EvolutionPayload
+  if (raw.event === "messages.update") {
+    const dataArr = Array.isArray(raw.data) ? raw.data : [raw.data]
+    for (const upd of dataArr) {
+      const item = upd as { key?: { id?: string; remoteJid?: string }; update?: { status?: string } }
+      const msgId    = item?.key?.id
+      const jid      = item?.key?.remoteJid
+      const rawStatus = item?.update?.status
+
+      const statusMap: Record<string, string> = {
+        SERVER_ACK:   "SENT",
+        DELIVERY_ACK: "DELIVERED",
+        READ:         "READ",
+        PLAYED:       "READ",
+      }
+      const status = rawStatus ? (statusMap[rawStatus] ?? rawStatus) : null
+
+      if (msgId && status) {
+        await query(
+          `UPDATE lab.messages SET status = $1 WHERE id = $2`,
+          [status, msgId]
+        ).catch(console.error)
+
+        if (jid) {
+          emit(jid, "message_status", { id: msgId, status })
+        }
+      }
+    }
+    return NextResponse.json({ ok: true, action: "status_updated" })
+  }
+
+  const payload = raw as unknown as EvolutionPayload
+
+  // 2b. Filtra apenas eventos de mensagem (ignora presence, connection etc)
   if (payload.event !== "messages.upsert") {
     return NextResponse.json({ ok: true, skipped: payload.event })
   }

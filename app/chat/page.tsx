@@ -1462,6 +1462,11 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
       })
 
+      es.addEventListener("message_status", (e) => {
+        const { id, status } = JSON.parse((e as MessageEvent).data) as { id: string; status: string }
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m))
+      })
+
       es.addEventListener("ping", () => { retries = 0 })
 
       es.onerror = () => {
