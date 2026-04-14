@@ -4,6 +4,7 @@
 
 import type { EvolutionPayload, ClassificationResult, HandlerResult } from "./types"
 import { handleComando } from "./handlers/comando"
+import { handleAudio } from "./handlers/audio"
 
 export async function dispatch(
   payload: EvolutionPayload,
@@ -27,9 +28,7 @@ export async function dispatch(
       return handleComando(payload, dryRun)
 
     case "audio":
-      // Handler futuro: transcrição com Whisper
-      console.log("[dispatcher] áudio recebido — handler não implementado")
-      return { success: true, action: "audio_sem_handler" }
+      return handleAudio(payload)
 
     case "texto_livre":
       // Handler futuro: agente IA

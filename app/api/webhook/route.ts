@@ -200,11 +200,17 @@ export async function POST(req: NextRequest) {
   const classification = classify(payload)
   console.log(`[webhook] classificado: ${classification.kind} (${classification.confidence})`)
 
-  // 5. Despacha para o handler
+  // 5. Para áudio: persiste primeiro para o INSERT existir antes da transcrição fazer UPDATE
+  const isAudio = payload.data?.messageType === "audioMessage"
+  if (isAudio) {
+    await persistChatMessage(payload)
+  }
+
+  // 6. Despacha para o handler
   const result = await dispatch(payload, classification)
   console.log(`[webhook] resultado: ${result.action} | success=${result.success}`)
 
-  // 6. Persiste log no banco (não bloqueia a resposta)
+  // 7. Persiste log no banco (não bloqueia a resposta)
   logWebhook({
     received_at: new Date(),
     instance: payload.instance,
@@ -218,8 +224,10 @@ export async function POST(req: NextRequest) {
     raw_payload: payload,
   }).catch(console.error)
 
-  // 7. Persiste mensagem nas tabelas do chat
-  persistChatMessage(payload).catch(console.error)
+  // 8. Persiste mensagem nas tabelas do chat (áudio já foi persistido antes)
+  if (!isAudio) {
+    persistChatMessage(payload).catch(console.error)
+  }
 
   return NextResponse.json({ ok: true, ...result })
 }
