@@ -11,7 +11,7 @@ import { logWebhook, query } from "@/lib/db"
 
 // Persiste mensagem recebida nas tabelas do chat
 async function persistChatMessage(payload: EvolutionPayload) {
-  const jid     = payload.data?.key?.remoteJid
+  let jid        = payload.data?.key?.remoteJid
   const msgId   = payload.data?.key?.id
   const fromMe  = payload.data?.key?.fromMe ?? false
   const msgType = payload.data?.messageType ?? "conversation"
@@ -23,6 +23,26 @@ async function persistChatMessage(payload: EvolutionPayload) {
 
   const content = extractText(payload) || null
   const instance = payload.instance
+
+  // @lid: identificador de dispositivo sem número real — tenta resolver para conversa existente
+  if (jid.endsWith("@lid")) {
+    const rawName = payload.data?.pushName
+    if (rawName) {
+      const found = await query<{ jid: string }>(
+        `SELECT jid FROM lab.conversations
+         WHERE profile_name = $1 AND instance = $2 AND jid LIKE '%@s.whatsapp.net'
+         LIMIT 1`,
+        [rawName, instance]
+      )
+      if (found.length === 1) {
+        jid = found[0].jid  // redireciona mensagem para conversa existente
+      } else {
+        return  // não conseguiu resolver com segurança, ignora
+      }
+    } else {
+      return  // sem pushName para tentar resolver, ignora
+    }
+  }
 
   // Para grupos, pushName é o nome do membro — não usar como profile_name do grupo
   const isGroup  = jid?.endsWith("@g.us") ?? false

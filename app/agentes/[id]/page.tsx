@@ -347,6 +347,7 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
   const [salvado, setSalvado]     = useState(false)
   const [analisadoAte, setAnalisadoAte] = useState<string | null>(agente.analisado_ate)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const topRef    = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch(`/api/agentes/${agente.id}/refinamento`)
@@ -430,8 +431,14 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
     }
   }
 
+  const hasSugestoes = !!promptSugerido || modulosSugeridos.length > 0
+  const totalSugestoes = (promptSugerido ? 1 : 0) + modulosSugeridos.length
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+      {/* Âncora do topo — usada pelo botão "subir para sugestões" */}
+      <div ref={topRef} />
 
       {/* Prompt sugerido */}
       {promptSugerido && (
@@ -524,6 +531,29 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Botão sticky — sobe para sugestões */}
+      {hasSugestoes && (
+        <div style={{ position: "sticky", bottom: 16, zIndex: 10, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+          <button
+            onClick={() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{
+              pointerEvents: "all",
+              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 12, fontWeight: 600, padding: "7px 16px",
+              borderRadius: 99, cursor: "pointer",
+              background: "#fef08a", color: "#78350f",
+              border: "1px solid #facc15",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#fde047")}
+            onMouseLeave={e => (e.currentTarget.style.background = "#fef08a")}
+          >
+            ↑ Ver {totalSugestoes === 1 ? "sugestão" : `${totalSugestoes} sugestões`} no topo
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", paddingTop: 10, borderTop: "1px solid var(--border)" }}>

@@ -7,6 +7,100 @@ import { query } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 
+// ─── Lookup de cliente pelo JID ───────────────────────────────────────────────
+
+function normalizePhone(jid: string) {
+  return jid.replace("@s.whatsapp.net", "").replace("@g.us", "")
+}
+
+function phoneVariants(jid: string): string[] {
+  const num = normalizePhone(jid)
+  const variants = [num]
+  if (num.startsWith("55") && num.length >= 12) variants.push(num.slice(2))
+  if (!num.startsWith("55") && num.length <= 11) variants.push("55" + num)
+  return variants
+}
+
+async function buildClienteContext(jid: string): Promise<string> {
+  if (!jid.endsWith("@s.whatsapp.net")) return ""
+
+  const variants = phoneVariants(jid)
+  const placeholders = variants.map((_, i) => `$${i + 1}`).join(", ")
+
+  type ClienteRow = {
+    id_cliente: number
+    nome: string
+    score_fidelidade: number | null
+    id_assinatura: number | null
+    status: string | null
+    venc_contas: string | null
+    venc_contrato: string | null
+    identificacao: string | null
+    plano_tipo: string | null
+    plano_telas: number | null
+    plano_meses: number | null
+    plano_valor: number | null
+    nome_app: string | null
+    app_status: string | null
+    app_validade: string | null
+  }
+
+  const rows = await query<ClienteRow>(`
+    SELECT DISTINCT ON (c.id_cliente, a.id_assinatura, ar.id_app_registro)
+      c.id_cliente, c.nome, c.score_fidelidade,
+      a.id_assinatura, a.status, a.venc_contas::text, a.venc_contrato::text, a.identificacao,
+      pl.tipo AS plano_tipo, pl.telas AS plano_telas, pl.meses AS plano_meses, pl.valor AS plano_valor,
+      ap.nome_app, ar.status AS app_status, ar.validade::text AS app_validade
+    FROM public.contatos co
+    JOIN public.clientes c ON c.id_cliente = co.id_cliente
+    LEFT JOIN public.assinaturas a ON a.id_cliente = c.id_cliente
+    LEFT JOIN public.planos pl ON pl.id_plano = a.id_plano
+    LEFT JOIN public.aplicativos ar ON ar.id_cliente = c.id_cliente
+    LEFT JOIN public.apps ap ON ap.id_app = ar.id_app
+    WHERE co.telefone IN (${placeholders})
+    ORDER BY c.id_cliente, a.id_assinatura, ar.id_app_registro
+    LIMIT 30
+  `, variants).catch(() => [] as ClienteRow[])
+
+  if (rows.length === 0) return ""
+
+  // Agrupa por cliente (pode haver mais de um no mesmo número)
+  const clientes = new Map<number, {
+    nome: string
+    score: number | null
+    assinaturas: Set<string>
+    apps: Set<string>
+  }>()
+
+  for (const r of rows) {
+    if (!clientes.has(r.id_cliente)) {
+      clientes.set(r.id_cliente, { nome: r.nome, score: r.score_fidelidade ? Number(r.score_fidelidade) : null, assinaturas: new Set(), apps: new Set() })
+    }
+    const c = clientes.get(r.id_cliente)!
+    if (r.id_assinatura && r.status) {
+      const plano = r.plano_tipo
+        ? `${r.plano_tipo} ${r.plano_telas}t/${r.plano_meses}m R$${Number(r.plano_valor ?? 0).toFixed(0)}`
+        : ""
+      const venc = r.venc_contas ? ` venc.${r.venc_contas.slice(0, 10)}` : ""
+      const id = r.identificacao ? ` (${r.identificacao})` : ""
+      c.assinaturas.add(`[${r.status.toUpperCase()}]${id} ${plano}${venc}`.trim())
+    }
+    if (r.nome_app && r.app_status) {
+      const val = r.app_validade ? ` val.${r.app_validade.slice(0, 10)}` : ""
+      c.apps.add(`${r.nome_app} [${r.app_status}]${val}`)
+    }
+  }
+
+  const linhas: string[] = ["[DADOS DO CLIENTE]"]
+  for (const [, c] of clientes) {
+    linhas.push(`Cliente: ${c.nome}${c.score != null ? ` | Score: ${c.score}` : ""}`)
+    if (c.assinaturas.size > 0) linhas.push(`Assinaturas: ${[...c.assinaturas].join(" | ")}`)
+    if (c.apps.size > 0) linhas.push(`Apps: ${[...c.apps].join(" | ")}`)
+  }
+
+  return "\n\n" + linhas.join("\n")
+}
+
 // Baixa mídia da Evolution e retorna base64
 async function getMediaBase64(instance: string, messageId: string): Promise<{ base64: string; mimetype: string } | null> {
   try {
@@ -90,9 +184,12 @@ export async function POST(req: NextRequest) {
       ? "\n\n" + modulosAtivos.map(m => `[${m.nome.toUpperCase()}]\n${m.conteudo}`).join("\n\n---\n\n")
       : ""
 
+    const clienteCtx = await buildClienteContext(jid)
+
     const systemPrompt =
       agente.prompt_atual +
       modulosTexto +
+      clienteCtx +
       "\n\n---\nResponda APENAS com o texto da mensagem, sem explicações, sem aspas, sem formatação extra. Será enviado diretamente ao cliente."
 
     // ── Áudio: sugestão genérica sem chamar a API ────────────────────────────

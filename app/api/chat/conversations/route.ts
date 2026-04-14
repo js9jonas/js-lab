@@ -26,6 +26,7 @@ export async function GET() {
              is_client, shadow_mode, muted,
              COALESCE(pinned, FALSE) AS pinned
       FROM lab.conversations
+      WHERE jid NOT LIKE '%@lid'
       ORDER BY COALESCE(pinned, FALSE) DESC, last_message_at DESC NULLS LAST
       LIMIT 100
     `)

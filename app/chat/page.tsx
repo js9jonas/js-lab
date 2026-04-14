@@ -175,14 +175,35 @@ function ConversationItem({ conv, active, onClick, onPinToggled }: {
       <div
         onClick={onClick}
         onContextMenu={handleContextMenu}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", background: active ? "#e8f5e9" : conv.pinned ? "#f0f9ff" : "transparent", borderBottom: "1px solid var(--border)", transition: "background 0.12s", position: "relative" }}
-        onMouseEnter={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = conv.pinned ? "#e0f2fe" : "var(--bg-hover)" }}
+        style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+          cursor: "pointer",
+          background: active ? (isGroup ? "#ede9fe" : "#e8f5e9") : conv.pinned ? "#f0f9ff" : "transparent",
+          borderBottom: "1px solid var(--border)",
+          borderLeft: isGroup ? "3px solid #7c3aed" : "3px solid transparent",
+          transition: "background 0.12s",
+          position: "relative",
+        }}
+        onMouseEnter={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = conv.pinned ? "#e0f2fe" : isGroup ? "#f5f3ff" : "var(--bg-hover)" }}
         onMouseLeave={e => { if (!active) (e.currentTarget as HTMLDivElement).style.background = conv.pinned ? "#f0f9ff" : "transparent" }}
       >
-        <Avatar name={displayName} pic={conv.profile_pic_url} size={44} />
+        {/* Avatar com badge de grupo */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <Avatar name={displayName} pic={conv.profile_pic_url} size={44} />
+          {isGroup && (
+            <span style={{
+              position: "absolute", bottom: -2, right: -2,
+              background: "#7c3aed", color: "#fff", borderRadius: 99,
+              fontSize: 8, fontWeight: 700, padding: "1px 4px", lineHeight: "14px",
+              border: "1.5px solid #fff", whiteSpace: "nowrap",
+            }}>
+              GRP
+            </span>
+          )}
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-            <span style={{ fontWeight: conv.unread_count > 0 ? 600 : 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>
+            <span style={{ fontWeight: conv.unread_count > 0 ? 600 : 500, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140, color: isGroup ? "#5b21b6" : undefined }}>
               {displayName}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
@@ -197,7 +218,7 @@ function ConversationItem({ conv, active, onClick, onPinToggled }: {
               {conv.last_message ?? "Sem mensagens"}
             </span>
             {conv.unread_count > 0 && (
-              <span style={{ background: "#16a34a", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px", flexShrink: 0, marginLeft: 4 }}>
+              <span style={{ background: isGroup ? "#7c3aed" : "#16a34a", color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px", flexShrink: 0, marginLeft: 4 }}>
                 {conv.unread_count}
               </span>
             )}
