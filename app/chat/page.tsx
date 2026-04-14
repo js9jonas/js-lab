@@ -5,6 +5,7 @@ import { getContactName } from "@/lib/contact-lookup"
 import type { ContactInfo } from "@/app/api/chat/contact/route"
 import type { GroupMetadata } from "@/app/api/chat/group-metadata/route"
 import AudioPlayer from "@/components/chat/AudioPlayer"
+import TranscribeButton from "@/components/chat/TranscribeButton"
 import ImageLightbox from "@/components/chat/ImageLightbox"
 import ImagePreview, { fileToAttachment, type ImageAttachment } from "@/components/chat/ImagePreview"
 import PdfPreview from "@/components/chat/PdfPreview"
@@ -592,10 +593,12 @@ function MessageBubble({ msg, instance, isGroup, onReply, onForward, onDelete, s
         {msg.message_type === "audioMessage" && (
           <div>
             <AudioPlayer messageId={msg.id} instance={instance} fromMe={isMe} />
-            {msg.content && (
+            {msg.content ? (
               <div style={{ fontSize: 13, color: isMe ? "#e0f0e0" : "#555", lineHeight: 1.5, padding: "4px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word", fontStyle: "italic" }}>
                 {msg.content}
               </div>
+            ) : (
+              <TranscribeButton messageId={msg.id} jid={msg.jid} instance={instance} fromMe={isMe} />
             )}
           </div>
         )}
