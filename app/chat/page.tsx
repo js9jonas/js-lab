@@ -2070,21 +2070,24 @@ export default function ChatPage() {
       es = new EventSource("/api/chat/sse?jid=*")
 
       es.addEventListener("conversation_update", (e) => {
-        const { jid, last_message, last_message_at, unread_count_delta } =
+        const { jid, last_message, last_message_at, unread_count_delta, unread_count: absCount } =
           JSON.parse((e as MessageEvent).data) as {
             jid: string
             last_message: string | null
             last_message_at: string
-            unread_count_delta: number
+            unread_count_delta?: number
+            unread_count?: number
           }
         setConversations(prev => prev.map(c =>
           c.jid !== jid ? c : {
             ...c,
             last_message,
             last_message_at,
-            unread_count: unread_count_delta > 0
-              ? c.unread_count + unread_count_delta
-              : c.unread_count,
+            unread_count: absCount !== undefined
+              ? absCount
+              : (unread_count_delta ?? 0) > 0
+                ? c.unread_count + (unread_count_delta ?? 0)
+                : c.unread_count,
           }
         ))
       })
