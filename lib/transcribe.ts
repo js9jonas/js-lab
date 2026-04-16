@@ -16,14 +16,31 @@ export async function transcribeAudio(
 
   if (!OPENAI_KEY) return { ok: false, error: "OPENAI_API_KEY não configurada" }
 
-  // 1. Baixa o áudio como base64 da Evolution API
+  // 1. Busca o raw da mensagem no banco para montar o objeto completo
+  //    (necessário para áudios mais antigos fora do cache da Evolution)
+  let rawMessage: Record<string, unknown> | null = null
+  try {
+    const [row] = await query<{ raw: Record<string, unknown> }>(
+      `SELECT raw FROM lab.messages WHERE id = $1 LIMIT 1`,
+      [messageId]
+    )
+    rawMessage = row?.raw ?? null
+  } catch { /* silencioso — tenta só com o key.id */ }
+
+  // 2. Baixa o áudio como base64 da Evolution API
   let base64: string
   let mimetype: string
   try {
+    // Se tiver o raw completo, usa o message object para permitir re-download
+    // de áudios antigos que não estão mais no cache da Evolution
+    const messageBody = rawMessage?.message
+      ? { key: (rawMessage.key ?? { id: messageId }), message: rawMessage.message }
+      : { key: { id: messageId } }
+
     const res = await fetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${instance}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
-      body: JSON.stringify({ message: { key: { id: messageId } }, convertToMp4: false }),
+      body: JSON.stringify({ message: messageBody, convertToMp4: false }),
     })
     const data = await res.json() as { base64?: string; mimetype?: string }
     if (!data.base64) throw new Error("base64 ausente na resposta")
