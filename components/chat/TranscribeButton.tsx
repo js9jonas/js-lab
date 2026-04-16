@@ -24,9 +24,12 @@ export default function TranscribeButton({ messageId, jid, instance, fromMe }: P
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { error?: string }
-        setErrorMsg(data.error ?? `HTTP ${res.status}`)
+        const msg = data.error ?? `HTTP ${res.status}`
+        console.error("[transcribe]", msg)
+        setErrorMsg(msg)
       }
     } catch (e) {
+      console.error("[transcribe]", e)
       setErrorMsg(String(e))
     } finally {
       setLoading(false)
@@ -53,16 +56,11 @@ export default function TranscribeButton({ messageId, jid, instance, fromMe }: P
             Transcrevendo…
           </>
         ) : errorMsg ? (
-          "⚠ Tentar novamente"
+          <span title={errorMsg}>⚠ {errorMsg}</span>
         ) : (
           "🎙 Transcrever"
         )}
       </button>
-      {errorMsg && (
-        <div style={{ fontSize: 10, color: "#dc2626", padding: "0 8px 4px", maxWidth: 220, wordBreak: "break-word" }}>
-          {errorMsg}
-        </div>
-      )}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
