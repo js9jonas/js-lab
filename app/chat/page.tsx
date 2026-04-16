@@ -585,8 +585,10 @@ function MessageBubble({ msg, instance, isGroup, onReply, onForward, onDelete, s
               <div style={{ fontSize: 13, color: isMe ? "#e0f0e0" : "#555", lineHeight: 1.5, padding: "4px 8px 2px", whiteSpace: "pre-wrap", wordBreak: "break-word", fontStyle: "italic" }}>
                 {msg.content}
               </div>
-            ) : (
+            ) : Date.now() - new Date(msg.timestamp).getTime() < 13 * 24 * 60 * 60 * 1000 ? (
               <TranscribeButton messageId={msg.id} jid={msg.jid} instance={instance} fromMe={isMe} />
+            ) : (
+              <div style={{ fontSize: 11, color: isMe ? "#a0c0a0" : "#aaa", padding: "2px 8px 4px", fontStyle: "italic" }}>áudio expirado</div>
             )}
           </div>
         )}

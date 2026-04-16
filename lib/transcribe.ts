@@ -42,10 +42,14 @@ export async function transcribeAudio(
       headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
       body: JSON.stringify({ message: messageBody, convertToMp4: false }),
     })
-    const data = await res.json() as { base64?: string; mimetype?: string }
+    const data = await res.json() as { base64?: string; mimetype?: string; response?: { message?: string[] } }
     if (!data.base64) {
-      console.error("[transcribe] Evolution resposta sem base64:", JSON.stringify(data).slice(0, 300))
-      throw new Error(`base64 ausente na resposta: ${JSON.stringify(data).slice(0, 200)}`)
+      const detail = data.response?.message?.[0] ?? ""
+      const expired = detail.includes("mmg.whatsapp.net") || detail.includes("fetch stream")
+      throw new Error(expired
+        ? "Áudio expirado — o WhatsApp remove mídias do CDN após ~14 dias"
+        : "base64 ausente na resposta da Evolution"
+      )
     }
     base64   = data.base64
     mimetype = data.mimetype ?? "audio/ogg"
