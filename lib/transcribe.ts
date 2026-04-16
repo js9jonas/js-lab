@@ -43,7 +43,10 @@ export async function transcribeAudio(
       body: JSON.stringify({ message: messageBody, convertToMp4: false }),
     })
     const data = await res.json() as { base64?: string; mimetype?: string }
-    if (!data.base64) throw new Error("base64 ausente na resposta")
+    if (!data.base64) {
+      console.error("[transcribe] Evolution resposta sem base64:", JSON.stringify(data).slice(0, 300))
+      throw new Error(`base64 ausente na resposta: ${JSON.stringify(data).slice(0, 200)}`)
+    }
     base64   = data.base64
     mimetype = data.mimetype ?? "audio/ogg"
   } catch (err) {
