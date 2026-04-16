@@ -28,7 +28,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       [prompt, id]
     )
 
-    return NextResponse.json({ ok: true, versao: novaVersao })
+    // Marca todos os aprendizados pendentes como incorporados nesta versão
+    const incorporados = await query<{ id: number }>(
+      `UPDATE lab.agente_aprendizados
+       SET incorporado = true
+       WHERE agente_id = $1 AND incorporado = false
+       RETURNING id`,
+      [id]
+    )
+
+    return NextResponse.json({ ok: true, versao: novaVersao, incorporados: incorporados.length })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

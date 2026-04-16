@@ -12,6 +12,8 @@ interface Agente {
   atualizado_em: string
   instancias: string[]
   aprendizados_pendentes: number
+  aprendizados_incorporados: number
+  aprendizados_total: number
 }
 
 // ─── Modal de criar agente ────────────────────────────────────────────────────
@@ -141,11 +143,26 @@ function AgenteCard({ agente, onRefresh }: { agente: Agente; onRefresh: () => vo
           {agente.descricao && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{agente.descricao}</div>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {agente.aprendizados_pendentes > 0 && (
-            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: "#fef9c3", color: "#ca8a04", fontWeight: 600, border: "1px solid #fef08a" }}>
-              {agente.aprendizados_pendentes} aprendizados
-            </span>
-          )}
+          {(() => {
+            const total = agente.aprendizados_total
+            const inc   = agente.aprendizados_incorporados
+            const pend  = agente.aprendizados_pendentes
+            if (total === 0) return null
+            const pct = Math.round((inc / total) * 100)
+            const cor = pend === 0 ? "#16a34a" : pend <= 3 ? "#ca8a04" : "#dc2626"
+            const bg  = pend === 0 ? "#dcfce7"  : pend <= 3 ? "#fef9c3"  : "#fee2e2"
+            const brd = pend === 0 ? "#bbf7d0"  : pend <= 3 ? "#fef08a"  : "#fecaca"
+            return (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: bg, color: cor, fontWeight: 700, border: `1px solid ${brd}` }}>
+                  {pct}% alinhado
+                </span>
+                {pend > 0 && (
+                  <span style={{ fontSize: 9, color: cor, opacity: 0.85 }}>{pend} pendente{pend !== 1 ? "s" : ""}</span>
+                )}
+              </div>
+            )
+          })()}
           <div onClick={toggleAtivo} style={{ width: 36, height: 20, borderRadius: 10, cursor: "pointer", background: agente.ativo ? "#16a34a" : "var(--bg-elevated)", position: "relative", transition: "background 0.2s", border: "1px solid var(--border)" }}>
             <div style={{ position: "absolute", top: 2, left: agente.ativo ? 17 : 2, width: 14, height: 14, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)" }} />
           </div>
@@ -232,7 +249,7 @@ export default function AgentesPage() {
         <div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>Agentes IA</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-            {ativos.length} ativo{ativos.length !== 1 ? "s" : ""} · {agentes.reduce((s, a) => s + a.aprendizados_pendentes, 0)} aprendizados pendentes
+            {ativos.length} ativo{ativos.length !== 1 ? "s" : ""} · {agentes.reduce((s, a) => s + a.aprendizados_incorporados, 0)} incorporados · {agentes.reduce((s, a) => s + a.aprendizados_pendentes, 0)} pendentes
           </div>
         </div>
         <button onClick={() => setShowCreate(true)} style={{ padding: "7px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "#2563eb", color: "#fff", border: "none", cursor: "pointer" }}>

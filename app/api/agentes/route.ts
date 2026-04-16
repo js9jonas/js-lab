@@ -12,8 +12,10 @@ export interface AgenteRow {
   ativo: boolean
   criado_em: string
   atualizado_em: string
-  instancias: string[]          // nomes das instâncias vinculadas
+  instancias: string[]
   aprendizados_pendentes: number
+  aprendizados_incorporados: number
+  aprendizados_total: number
 }
 
 export async function GET() {
@@ -26,7 +28,9 @@ export async function GET() {
           ARRAY_AGG(DISTINCT ai.instance) FILTER (WHERE ai.instance IS NOT NULL),
           '{}'
         ) AS instancias,
-        COUNT(ap.id) FILTER (WHERE ap.incorporado = false) AS aprendizados_pendentes
+        COUNT(ap.id) FILTER (WHERE ap.incorporado = false) AS aprendizados_pendentes,
+        COUNT(ap.id) FILTER (WHERE ap.incorporado = true)  AS aprendizados_incorporados,
+        COUNT(ap.id) AS aprendizados_total
       FROM lab.agentes a
       LEFT JOIN lab.agente_instancias ai ON ai.agente_id = a.id AND ai.ativo = true
       LEFT JOIN lab.agente_aprendizados ap ON ap.agente_id = a.id
