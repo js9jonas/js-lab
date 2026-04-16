@@ -28,11 +28,16 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
     const aprendizados = await query<{
       id: number; jid: string; sugestao_ia: string; resposta_real: string
-      incorporado: boolean; criado_em: string
+      incorporado: boolean; tipo: string; requer_discussao: boolean
+      nota_discussao: string | null; criado_em: string
     }>(
-      `SELECT id, jid, sugestao_ia, resposta_real, incorporado, criado_em::text
+      `SELECT id, jid, sugestao_ia, resposta_real, incorporado,
+              COALESCE(tipo, 'lacuna') AS tipo,
+              COALESCE(requer_discussao, false) AS requer_discussao,
+              nota_discussao,
+              criado_em::text
        FROM lab.agente_aprendizados WHERE agente_id = $1
-       ORDER BY criado_em DESC LIMIT 50`, [id]
+       ORDER BY requer_discussao DESC, criado_em DESC LIMIT 50`, [id]
     )
 
     return NextResponse.json({ ...agente, instancias, versoes, aprendizados })

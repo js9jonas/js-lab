@@ -36,11 +36,17 @@ export async function POST(req: NextRequest, ctx: Ctx) {
        FROM lab.agente_modulos WHERE agente_id = $1 ORDER BY ordem`, [id]
     )
 
-    const aprendizados = await query<{ sugestao_ia: string; resposta_real: string; criado_em: string }>(
-      `SELECT sugestao_ia, resposta_real, criado_em::text
+    const aprendizados = await query<{
+      sugestao_ia: string; resposta_real: string; criado_em: string
+      tipo: string; requer_discussao: boolean; nota_discussao: string | null
+    }>(
+      `SELECT sugestao_ia, resposta_real, criado_em::text,
+              COALESCE(tipo, 'lacuna') AS tipo,
+              COALESCE(requer_discussao, false) AS requer_discussao,
+              nota_discussao
        FROM lab.agente_aprendizados
        WHERE agente_id = $1 AND incorporado = false
-       ORDER BY criado_em DESC LIMIT 20`, [id]
+       ORDER BY requer_discussao DESC, criado_em DESC LIMIT 20`, [id]
     )
 
     const historico = await query<{ role: string; content: string }>(
@@ -71,13 +77,22 @@ ${agente.prompt_atual || "(vazio — ainda não definido)"}
 ${modulosTexto}
 ═══════════════════════
 
-${aprendizados.length > 0 ? `═══ APRENDIZADOS PENDENTES (${aprendizados.length}) ═══
-${aprendizados.map((a, i) =>
-  `[${i + 1}] ${new Date(a.criado_em).toLocaleDateString("pt-BR")}\n  Agente sugeriu: "${a.sugestao_ia}"\n  Usuário enviou: "${a.resposta_real}"`
-).join("\n\n")}
-═══════════════════════
+${aprendizados.length > 0 ? (() => {
+  const tipoLabel: Record<string, string> = { correcao: "CORREÇÃO", lacuna: "LACUNA", insight: "INSIGHT" }
+  const discussao = aprendizados.filter(a => a.requer_discussao)
+  const resto = aprendizados.filter(a => !a.requer_discussao)
 
-` : ""}
+  const formatar = (a: typeof aprendizados[0], i: number) =>
+    `[${i + 1}] ${new Date(a.criado_em).toLocaleDateString("pt-BR")} — ${tipoLabel[a.tipo] ?? a.tipo}` +
+    (a.nota_discussao ? `\n  ⚠ Nota: ${a.nota_discussao}` : "") +
+    `\n  Agente sugeriu: "${a.sugestao_ia}"\n  Usuário enviou: "${a.resposta_real}"`
+
+  const blocos: string[] = []
+  if (discussao.length > 0) blocos.push(`⚠ REQUEREM DISCUSSÃO (${discussao.length}):\n${discussao.map(formatar).join("\n\n")}`)
+  if (resto.length > 0)     blocos.push(`DEMAIS APRENDIZADOS (${resto.length}):\n${resto.map((a, i) => formatar(a, discussao.length + i)).join("\n\n")}`)
+
+  return `═══ APRENDIZADOS PENDENTES (${aprendizados.length}) ═══\n${blocos.join("\n\n")}\n═══════════════════════\n\n`
+})() : ""}
 Seu papel nesta conversa:
 1. Analisar o prompt base e os módulos existentes como um todo
 2. Identificar lacunas, sobreposições ou oportunidades de melhoria
@@ -122,7 +137,11 @@ Seja direto e orientado a resultados. Pode ser crítico sobre a estrutura atual.
       }),
     })
 
-    const data = await apiRes.json() as { content: { type: string; text: string }[] }
+    const data = await apiRes.json() as { content?: { type: string; text: string }[]; error?: { message: string } }
+    if (!apiRes.ok || !data.content) {
+      const msg = data.error?.message ?? `HTTP ${apiRes.status}`
+      return NextResponse.json({ error: `Erro na API Anthropic: ${msg}` }, { status: 502 })
+    }
     const resposta = data.content.filter(b => b.type === "text").map(b => b.text).join("")
 
     await query(

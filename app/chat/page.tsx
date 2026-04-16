@@ -1370,6 +1370,138 @@ function AgenteRefinamentoModal({ conv, onClose }: { conv: Conversation; onClose
   )
 }
 
+// ─── Modal elaborar mensagem ──────────────────────────────────────────────────
+
+function ElaborarMensagemModal({ conv, onClose, onUsarMensagem }: { conv: Conversation; onClose: () => void; onUsarMensagem: (msg: string) => void }) {
+  const [msgs, setMsgs]               = useState<ChatRefinMsg[]>([])
+  const [input, setInput]             = useState("")
+  const [sending, setSending]         = useState(false)
+  const [agenteNome, setAgenteNome]   = useState<string | null>(null)
+  const [mensagemGerada, setMensagemGerada] = useState<string | null>(null)
+  const [erro, setErro]               = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs.length])
+
+  async function handleSend() {
+    const txt = input.trim()
+    if (!txt || sending) return
+    setInput("")
+    setSending(true)
+    setMsgs(prev => [...prev, { role: "user", content: txt }])
+    setErro(null)
+    try {
+      const res = await fetch("/api/chat/elaborar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jid: conv.jid, instance: conv.instance, message: txt, historico: msgs }),
+      })
+      const data = await res.json() as {
+        resposta?: string; mensagemGerada?: string | null
+        agente_id?: number; agente_nome?: string; error?: string
+      }
+      if (data.error) { setErro(data.error); setMsgs(prev => prev.slice(0, -1)); return }
+      if (data.resposta)    setMsgs(prev => [...prev, { role: "assistant", content: data.resposta! }])
+      if (data.agente_nome) setAgenteNome(data.agente_nome)
+      if (data.mensagemGerada) setMensagemGerada(data.mensagemGerada)
+    } catch { setErro("Erro de conexão.") }
+    finally { setSending(false) }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 700, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 16, width: 680, maxWidth: "95vw", maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 48px rgba(0,0,0,0.2)" }}
+      >
+        {/* Header */}
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#c2410c" }}>✦ Elaborar mensagem</div>
+            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+              {agenteNome ? `Agente: ${agenteNome} · ` : ""}Contexto: {conv.profile_name ?? conv.jid}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#6b7280" }}>✕</button>
+        </div>
+
+        {/* Área de scroll */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Mensagem gerada */}
+          {mensagemGerada && (
+            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10, padding: 14, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#c2410c" }}>✦ Mensagem gerada</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setMensagemGerada(null)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid #fed7aa", color: "#c2410c", cursor: "pointer" }}>Descartar</button>
+                  <button onClick={() => { onUsarMensagem(mensagemGerada); onClose() }} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: "#c2410c", color: "#fff", border: "none", cursor: "pointer", fontWeight: 600 }}>
+                    ✓ Usar mensagem
+                  </button>
+                </div>
+              </div>
+              <pre style={{ fontSize: 13, color: "#7c2d12", background: "#ffedd5", borderRadius: 6, padding: "10px 12px", whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.6, maxHeight: 200, overflowY: "auto" }}>
+                {mensagemGerada}
+              </pre>
+            </div>
+          )}
+
+          {/* Mensagens do chat */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {msgs.length === 0 && !erro && (
+              <div style={{ textAlign: "center", padding: "32px 20px", color: "#9ca3af", fontSize: 13 }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>✦</div>
+                Descreva sua intenção ou os detalhes que quer transmitir.<br />
+                O agente usa o contexto da conversa para elaborar a mensagem ideal.
+              </div>
+            )}
+            {erro && (
+              <div style={{ background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#dc2626" }}>
+                {erro}
+              </div>
+            )}
+            {msgs.map((msg, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{ maxWidth: "82%", padding: "10px 14px", borderRadius: msg.role === "user" ? "12px 2px 12px 12px" : "2px 12px 12px 12px", background: msg.role === "user" ? "#c2410c" : "#f8fafc", color: msg.role === "user" ? "#fff" : "#1e293b", fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", border: msg.role === "assistant" ? "1px solid #e2e8f0" : "none" }}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {sending && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div style={{ padding: "10px 14px", borderRadius: "2px 12px 12px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#94a3b8", fontSize: 13 }}>Elaborando mensagem...</div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        {/* Input */}
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e7eb", display: "flex", gap: 8, alignItems: "flex-end", flexShrink: 0 }}>
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+            placeholder="Descreva a intenção, detalhes ou contexto para a mensagem... (Enter para enviar)"
+            rows={2}
+            style={{ flex: 1, resize: "none", padding: "9px 12px", fontSize: 13, borderRadius: 10, border: "1px solid #e2e8f0", outline: "none", lineHeight: 1.5, fontFamily: "inherit" }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || sending}
+            style={{ width: 40, height: 40, borderRadius: "50%", background: input.trim() && !sending ? "#c2410c" : "#e2e8f0", border: "none", color: input.trim() && !sending ? "#fff" : "#94a3b8", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
+          >
+            ➤
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Área de mensagens ────────────────────────────────────────────────────────
 
 function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpenConversation?: (jid: string) => void }) {
@@ -1385,6 +1517,7 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
   const [autoSuggest, setAutoSuggest] = useState(false)
   const [agenteNome, setAgenteNome]   = useState<string | null>(null)
   const [refinamentoOpen, setRefinamentoOpen] = useState(false)
+  const [elaborarOpen, setElaborarOpen]       = useState(false)
   const [attachment, setAttachment]     = useState<ImageAttachment | null>(null)
   const [sendImgError, setSendImgError] = useState<string | null>(null)
   const [stickerAttachment, setStickerAttachment] = useState<{ dataUrl: string; base64: string } | null>(null)
@@ -1891,6 +2024,12 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
                 style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#f0f9ff", border: "1px solid #bae6fd", color: "#0369a1", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                 ◇ refinar agente
               </button>
+              <button
+                onClick={() => setElaborarOpen(true)}
+                title="Elaborar uma mensagem com ajuda do agente"
+                style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#fff7ed", border: "1px solid #fed7aa", color: "#c2410c", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                ✦ elaborar mensagem
+              </button>
             </>
           )}
           <button
@@ -1904,6 +2043,15 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
         {/* Modal de refinamento do agente */}
         {refinamentoOpen && (
           <AgenteRefinamentoModal conv={conv} onClose={() => setRefinamentoOpen(false)} />
+        )}
+
+        {/* Modal de elaboração de mensagem */}
+        {elaborarOpen && (
+          <ElaborarMensagemModal
+            conv={conv}
+            onClose={() => setElaborarOpen(false)}
+            onUsarMensagem={msg => { setText(msg); setElaborarOpen(false); setTimeout(() => inputRef.current?.focus(), 50) }}
+          />
         )}
 
         {/* Preview de imagem pré-envio */}

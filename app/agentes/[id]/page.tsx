@@ -12,8 +12,9 @@ interface AgenteDetalhe {
   instancias: { instance: string; ativo: boolean }[]
   versoes: { versao: number; motivo: string | null; criado_em: string }[]
   aprendizados: {
-    id: number; jid: string; sugestao_ia: string
-    resposta_real: string; incorporado: boolean; criado_em: string
+    id: number; jid: string; sugestao_ia: string; resposta_real: string
+    incorporado: boolean; tipo: string; requer_discussao: boolean
+    nota_discussao: string | null; criado_em: string
   }[]
 }
 
@@ -263,9 +264,18 @@ function TabPrompt({ agente, onSaved }: { agente: AgenteDetalhe; onSaved: () => 
 
 // ─── Aba: Aprendizados ────────────────────────────────────────────────────────
 
-function TabAprendizados({ agente }: { agente: AgenteDetalhe }) {
+const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  correcao: { label: "Correção",  color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+  lacuna:   { label: "Lacuna",    color: "#d97706", bg: "#fffbeb", border: "#fde68a" },
+  insight:  { label: "Insight",   color: "#7c3aed", bg: "#faf5ff", border: "#e9d5ff" },
+}
+
+function TabAprendizados({ agente, onRefresh }: { agente: AgenteDetalhe; onRefresh: () => void }) {
   const pendentes    = agente.aprendizados.filter(a => !a.incorporado)
   const incorporados = agente.aprendizados.filter(a => a.incorporado)
+
+  const grupos: Record<string, typeof pendentes> = { correcao: [], lacuna: [], insight: [] }
+  for (const a of pendentes) grupos[a.tipo]?.push(a)
 
   if (agente.aprendizados.length === 0) return (
     <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)", fontSize: 13 }}>
@@ -274,29 +284,98 @@ function TabAprendizados({ agente }: { agente: AgenteDetalhe }) {
   )
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {pendentes.length > 0 && (
-        <>
-          <SectionLabel>{`PENDENTES — ${pendentes.length}`}</SectionLabel>
-          {pendentes.map(a => <AprendizadoCard key={a.id} a={a} />)}
-        </>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {(["correcao", "lacuna", "insight"] as const).map(tipo => {
+            const itens = grupos[tipo]
+            if (itens.length === 0) return null
+            const cfg = TIPO_CONFIG[tipo]
+            return (
+              <div key={tipo}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 99, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                    {cfg.label.toUpperCase()}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{itens.length} {itens.length === 1 ? "item" : "itens"}</span>
+                </div>
+                {itens.map(a => <AprendizadoCard key={a.id} a={a} onRefresh={onRefresh} />)}
+              </div>
+            )
+          })}
+        </div>
       )}
       {incorporados.length > 0 && (
-        <div style={{ opacity: 0.6 }}>
+        <div style={{ opacity: 0.55 }}>
           <SectionLabel>{`INCORPORADOS — ${incorporados.length}`}</SectionLabel>
-          {incorporados.slice(0, 10).map(a => <AprendizadoCard key={a.id} a={a} />)}
+          {incorporados.slice(0, 10).map(a => <AprendizadoCard key={a.id} a={a} onRefresh={onRefresh} />)}
         </div>
       )}
     </div>
   )
 }
 
-function AprendizadoCard({ a }: { a: AgenteDetalhe["aprendizados"][0] }) {
+function AprendizadoCard({ a, onRefresh }: { a: AgenteDetalhe["aprendizados"][0]; onRefresh: () => void }) {
+  const [salvando, setSalvando] = useState(false)
+  const cfg = TIPO_CONFIG[a.tipo] ?? TIPO_CONFIG.lacuna
+
+  async function toggleDiscussao() {
+    setSalvando(true)
+    await fetch(`/api/aprendizados/${a.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requer_discussao: !a.requer_discussao }),
+    })
+    onRefresh()
+    setSalvando(false)
+  }
+
+  async function setTipo(tipo: string) {
+    setSalvando(true)
+    await fetch(`/api/aprendizados/${a.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo }),
+    })
+    onRefresh()
+    setSalvando(false)
+  }
+
   return (
-    <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginBottom: 8 }}>
-      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>
-        {a.jid.replace("@s.whatsapp.net", "")} · {new Date(a.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+    <div style={{ background: "var(--bg-elevated)", border: `1px solid ${a.requer_discussao ? "#fca5a5" : "var(--border)"}`, borderRadius: 8, padding: 12, marginBottom: 8 }}>
+      {/* Cabeçalho */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", flex: 1 }}>
+          {a.jid.replace("@s.whatsapp.net", "")} · {new Date(a.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+        </span>
+        {/* Seletor de tipo */}
+        <select
+          value={a.tipo}
+          onChange={e => setTipo(e.target.value)}
+          disabled={salvando}
+          style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${cfg.border}`, background: cfg.bg, color: cfg.color, fontWeight: 700, cursor: "pointer" }}
+        >
+          <option value="correcao">Correção</option>
+          <option value="lacuna">Lacuna</option>
+          <option value="insight">Insight</option>
+        </select>
+        {/* Flag de discussão */}
+        <button
+          onClick={toggleDiscussao}
+          disabled={salvando}
+          title={a.requer_discussao ? "Remover flag de atenção" : "Marcar para discussão no refinamento"}
+          style={{ fontSize: 12, padding: "2px 8px", borderRadius: 6, border: `1px solid ${a.requer_discussao ? "#fca5a5" : "var(--border)"}`, background: a.requer_discussao ? "#fee2e2" : "transparent", color: a.requer_discussao ? "#dc2626" : "var(--text-muted)", cursor: "pointer", fontWeight: 600 }}
+        >
+          {a.requer_discussao ? "⚠ atenção" : "⚐"}
+        </button>
       </div>
+      {/* Nota de discussão */}
+      {a.nota_discussao && (
+        <div style={{ fontSize: 11, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "5px 9px", marginBottom: 8 }}>
+          ⚠ {a.nota_discussao}
+        </div>
+      )}
+      {/* Comparação agente vs usuário */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div style={{ background: "#fef9c3", borderRadius: 6, padding: "8px 10px", border: "1px solid #fef08a" }}>
           <div style={{ fontSize: 9, color: "#92400e", fontWeight: 700, marginBottom: 4 }}>AGENTE SUGERIU</div>
@@ -362,17 +441,27 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
     if (!txt || sending) return
     setInput(""); setSending(true)
     setMsgs(prev => [...prev, { role: "user", content: txt }])
-    const res = await fetch(`/api/agentes/${agente.id}/refinamento`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: txt }),
-    })
-    const data = await res.json() as {
-      resposta?: string; promptSugerido?: string; modulosSugeridos?: ModuloSugerido[]
+    try {
+      const res = await fetch(`/api/agentes/${agente.id}/refinamento`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: txt }),
+      })
+      const data = await res.json() as {
+        resposta?: string; promptSugerido?: string; modulosSugeridos?: ModuloSugerido[]
+        error?: string
+      }
+      if (data.error) {
+        setMsgs(prev => [...prev, { role: "assistant", content: `Erro: ${data.error}` }])
+      } else {
+        if (data.resposta)        setMsgs(prev => [...prev, { role: "assistant", content: data.resposta! }])
+        if (data.promptSugerido)  setPromptSugerido(data.promptSugerido)
+        if (data.modulosSugeridos?.length) setModulosSugeridos(data.modulosSugeridos)
+      }
+    } catch {
+      setMsgs(prev => [...prev, { role: "assistant", content: "Erro ao conectar com o servidor. Tente novamente." }])
+    } finally {
+      setSending(false)
     }
-    if (data.resposta)        setMsgs(prev => [...prev, { role: "assistant", content: data.resposta! }])
-    if (data.promptSugerido)  setPromptSugerido(data.promptSugerido)
-    if (data.modulosSugeridos?.length) setModulosSugeridos(data.modulosSugeridos)
-    setSending(false)
   }
 
   async function handleSalvarPrompt() {
@@ -772,7 +861,7 @@ export default function AgenteDetalhe() {
         {activeTab === "refinamento"  && <TabRefinamento  agente={agente} onPromptSalvo={loadAgente} onModuloSalvo={loadAgente} />}
         {activeTab === "modulos"      && <TabModulos      agente={agente} modulos={modulos} onRefresh={loadAgente} />}
         {activeTab === "prompt"       && <TabPrompt       agente={agente} onSaved={loadAgente} />}
-        {activeTab === "aprendizados" && <TabAprendizados agente={agente} />}
+        {activeTab === "aprendizados" && <TabAprendizados agente={agente} onRefresh={loadAgente} />}
         {activeTab === "versoes"      && <TabVersoes      agente={agente} />}
         {activeTab === "configuracao" && <TabConfig       agente={agente} onSaved={loadAgente} />}
       </div>

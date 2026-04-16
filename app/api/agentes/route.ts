@@ -23,7 +23,7 @@ export async function GET() {
         a.id, a.nome, a.descricao, a.prompt_atual, a.ativo,
         a.criado_em::text, a.atualizado_em::text,
         COALESCE(
-          ARRAY_AGG(ai.instance ORDER BY ai.instance) FILTER (WHERE ai.instance IS NOT NULL),
+          ARRAY_AGG(DISTINCT ai.instance) FILTER (WHERE ai.instance IS NOT NULL),
           '{}'
         ) AS instancias,
         COUNT(ap.id) FILTER (WHERE ap.incorporado = false) AS aprendizados_pendentes

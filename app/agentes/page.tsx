@@ -77,7 +77,7 @@ function CreateModal({ instanciasDisponiveis, onClose, onCreated }: {
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Nenhuma instância disponível</div>
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {instanciasDisponiveis.map(inst => (
+                {[...new Set(instanciasDisponiveis)].map(inst => (
                   <div
                     key={inst}
                     onClick={() => toggleInst(inst)}
@@ -156,7 +156,7 @@ function AgenteCard({ agente, onRefresh }: { agente: Agente; onRefresh: () => vo
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {agente.instancias.length === 0 ? (
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Sem instâncias vinculadas</span>
-        ) : agente.instancias.map(inst => (
+        ) : [...new Set(agente.instancias)].map(inst => (
           <span key={inst} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe", fontWeight: 500 }}>
             {inst}
           </span>

@@ -24,11 +24,54 @@ export async function POST(req: NextRequest) {
       [jid]
     )
 
+    // Classifica automaticamente via Claude (Haiku — rápido e barato)
+    let tipo: "correcao" | "lacuna" | "insight" = "lacuna"
+    let requer_discussao = false
+    let nota_discussao: string | null = null
+
+    try {
+      const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `Classifique este registro de aprendizado de um agente de atendimento WhatsApp.
+Responda SOMENTE um JSON: {"tipo":"correcao|lacuna|insight","requer_discussao":true|false,"nota":"motivo breve se requer_discussao=true, senão null"}
+- correcao: agente deu informação errada ou tom inadequado
+- lacuna: agente não sabia sobre o assunto (preço, produto, procedimento)
+- insight: ambas razoáveis, usuário melhorou a abordagem
+requer_discussao=true quando a diferença revela ambiguidade que precisa ser esclarecida no refinamento.`,
+            },
+            {
+              role: "user",
+              content: `Agente sugeriu: "${sugestao_ia}"\nUsuário enviou: "${resposta_real}"`,
+            },
+          ],
+        }),
+      })
+      const data = await apiRes.json() as { choices?: { message: { content: string } }[] }
+      const texto = data.choices?.[0]?.message?.content?.trim() ?? ""
+      const classificacao = JSON.parse(texto) as { tipo: typeof tipo; requer_discussao: boolean; nota: string | null }
+      tipo = classificacao.tipo ?? "lacuna"
+      requer_discussao = classificacao.requer_discussao ?? false
+      nota_discussao = classificacao.nota ?? null
+    } catch {
+      // Falha silenciosa — salva com defaults
+    }
+
     await query(
       `INSERT INTO lab.agente_aprendizados
-        (agente_id, jid, instance, contexto, sugestao_ia, resposta_real)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [agente_id, jid, instance, JSON.stringify(contexto), sugestao_ia, resposta_real]
+        (agente_id, jid, instance, contexto, sugestao_ia, resposta_real, tipo, requer_discussao, nota_discussao)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [agente_id, jid, instance, JSON.stringify(contexto), sugestao_ia, resposta_real, tipo, requer_discussao, nota_discussao]
     )
 
     return NextResponse.json({ ok: true })
