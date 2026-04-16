@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
       agente.prompt_atual +
       modulosTexto +
       clienteCtx +
-      "\n\n---\nResponda APENAS com o texto da mensagem, sem explicações, sem aspas, sem formatação extra. Será enviado diretamente ao cliente."
+      "\n\n---\nResponda com JSON válido neste formato exato:\n{\"raciocinio\": \"análise interna em 1-2 frases: o que você percebeu no contexto e por que esta resposta\", \"resposta\": \"mensagem a enviar ao cliente\"}\nSem texto fora do JSON. O campo raciocinio NÃO é enviado ao cliente."
 
     // ── Áudio: usa transcrição se disponível, senão resposta genérica ────────
     if (ultima.message_type === "audioMessage" && !ultima.content) {
@@ -291,13 +291,28 @@ export async function POST(req: NextRequest) {
       }),
     })
 
-    const data = await apiRes.json() as { content: { type: string; text: string }[] }
-    const sugestao = data.content
-      .filter(b => b.type === "text")
-      .map(b => b.text).join("").trim()
+    const data = await apiRes.json() as { content?: { type: string; text: string }[]; error?: { message: string } }
+    if (!apiRes.ok || !data.content) {
+      const msg = data.error?.message ?? `HTTP ${apiRes.status}`
+      return NextResponse.json({ error: `Erro na API: ${msg}` }, { status: 502 })
+    }
+    const raw = data.content.filter(b => b.type === "text").map(b => b.text).join("").trim()
+
+    let sugestao = raw
+    let raciocinio: string | null = null
+    try {
+      // extrai o JSON mesmo que haja texto antes/depois (alguns modelos adicionam markdown)
+      const match = raw.match(/\{[\s\S]*\}/)
+      if (match) {
+        const parsed = JSON.parse(match[0]) as { raciocinio?: string; resposta?: string }
+        sugestao   = parsed.resposta?.trim()   ?? raw
+        raciocinio = parsed.raciocinio?.trim() ?? null
+      }
+    } catch { /* fallback: usa o texto bruto como sugestão */ }
 
     return NextResponse.json({
       sugestao,
+      raciocinio,
       agente_id: agente.id,
       agente_nome: agente.nome,
       tipo: ultima.message_type === "imageMessage" ? "imagem" : "texto",

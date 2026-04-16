@@ -1362,8 +1362,21 @@ function AgenteRefinamentoModal({ conv, onClose }: { conv: Conversation; onClose
 
 // ─── Modal elaborar mensagem ──────────────────────────────────────────────────
 
-function ElaborarMensagemModal({ conv, onClose, onUsarMensagem }: { conv: Conversation; onClose: () => void; onUsarMensagem: (msg: string) => void }) {
-  const [msgs, setMsgs]               = useState<ChatRefinMsg[]>([])
+function ElaborarMensagemModal({ conv, onClose, onUsarMensagem, contextoInicial }: {
+  conv: Conversation
+  onClose: () => void
+  onUsarMensagem: (msg: string) => void
+  contextoInicial?: { raciocinio: string | null; sugestao: string | null } | null
+}) {
+  const [msgs, setMsgs]               = useState<ChatRefinMsg[]>(() => {
+    if (contextoInicial?.sugestao) {
+      const linhas = [`Sugeri: "${contextoInicial.sugestao}"`]
+      if (contextoInicial.raciocinio) linhas.push(`Meu raciocínio: ${contextoInicial.raciocinio}`)
+      linhas.push("O que você acha? Posso ajustar ou elaborar uma alternativa.")
+      return [{ role: "assistant", content: linhas.join("\n\n") }]
+    }
+    return []
+  })
   const [input, setInput]             = useState("")
   const [sending, setSending]         = useState(false)
   const [agenteNome, setAgenteNome]   = useState<string | null>(null)
@@ -1503,11 +1516,13 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
   const [qrFilter, setQrFilter]                   = useState("")
   const [sending, setSending]         = useState(false)
   const [sugestao, setSugestao]       = useState<string | null>(null)
+  const [raciocinio, setRaciocinio]   = useState<string | null>(null)
   const [sugestaoLoading, setSugestaoLoading] = useState(false)
   const [autoSuggest, setAutoSuggest] = useState(false)
   const [agenteNome, setAgenteNome]   = useState<string | null>(null)
   const [refinamentoOpen, setRefinamentoOpen] = useState(false)
   const [elaborarOpen, setElaborarOpen]       = useState(false)
+  const [elaborarContexto, setElaborarContexto] = useState<{ raciocinio: string | null; sugestao: string | null } | null>(null)
   const [attachment, setAttachment]     = useState<ImageAttachment | null>(null)
   const [sendImgError, setSendImgError] = useState<string | null>(null)
   const [stickerAttachment, setStickerAttachment] = useState<{ dataUrl: string; base64: string } | null>(null)
@@ -1559,9 +1574,10 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jid: conv.jid, instance: conv.instance, forcar }),
       })
-      const data = await res.json() as { sugestao?: string; agente_nome?: string; motivo?: string }
+      const data = await res.json() as { sugestao?: string; raciocinio?: string; agente_nome?: string; motivo?: string }
       if (data.sugestao) {
         setSugestao(data.sugestao)
+        setRaciocinio(data.raciocinio ?? null)
         setAgenteNome(data.agente_nome ?? null)
       }
     } catch { /* silencioso */ }
@@ -1569,7 +1585,7 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
   }, [conv.jid, conv.instance])
 
   useEffect(() => {
-    setLoading(true); setMessages([]); setSugestao(null); lastMsgId.current = null
+    setLoading(true); setMessages([]); setSugestao(null); setRaciocinio(null); lastMsgId.current = null
     loadMessages()
   }, [conv.jid, loadMessages])
 
@@ -1675,7 +1691,7 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
     const agenteIdRes = ehSugestao ? null : await buscarAgenteId()
 
     const replyRef = replyTo
-    setSending(true); setText(""); setSugestao(null); setReplyTo(null)
+    setSending(true); setText(""); setSugestao(null); setRaciocinio(null); setReplyTo(null)
     const tempMsg: Message = {
       id: `temp_${Date.now()}`, jid: conv.jid, from_me: true,
       message_type: replyRef ? "extendedTextMessage" : "conversation", content: conteudo,
@@ -1981,37 +1997,76 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
 
         {/* Campo de sugestão do agente */}
         {(sugestao || sugestaoLoading) && (
-          <div style={{ padding: "8px 12px 4px", display: "flex", alignItems: "flex-start", gap: 8 }}>
-            <div style={{ flex: 1, background: "#fff", borderRadius: 16, padding: "8px 14px", border: "1px solid #e9d5ff", minHeight: 36, position: "relative" }}>
-              <div style={{ fontSize: 9, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 3 }}>
-                ◆ SUGESTÃO DO AGENTE {agenteNome ? `· ${agenteNome}` : ""}
-              </div>
-              {sugestaoLoading ? (
-                <div style={{ fontSize: 12, color: "#c4b5fd", fontStyle: "italic" }}>Gerando sugestão...</div>
-              ) : (
-                <div
-                  onClick={() => sugestao && setText(sugestao)}
-                  style={{ fontSize: 13, color: "#6d28d9", lineHeight: 1.5, cursor: "pointer", fontStyle: "italic" }}
-                  title="Clique para editar no campo de texto"
-                >
-                  {sugestao}
+          <div style={{ padding: "8px 12px 4px" }}>
+            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e9d5ff", overflow: "hidden" }}>
+
+              {/* Header */}
+              <div style={{ padding: "5px 10px", background: "#faf5ff", borderBottom: "1px solid #ede9fe", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 9, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.08em" }}>
+                  ◆ SUGESTÃO {agenteNome ? `· ${agenteNome}` : ""}
+                </span>
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <button
+                    onClick={() => gerarSugestao(messages, true)}
+                    disabled={sugestaoLoading}
+                    title="Gerar nova sugestão"
+                    style={{ fontSize: 11, padding: "1px 7px", borderRadius: 99, background: "#ede9fe", border: "1px solid #ddd6fe", color: "#7c3aed", cursor: "pointer" }}>
+                    ↺
+                  </button>
+                  {sugestao && (
+                    <button
+                      onClick={() => { setElaborarContexto({ raciocinio, sugestao }); setElaborarOpen(true) }}
+                      title="Discutir divergência com o agente"
+                      style={{ fontSize: 10, padding: "1px 8px", borderRadius: 99, background: "#fff7ed", border: "1px solid #fed7aa", color: "#c2410c", cursor: "pointer", fontWeight: 600 }}>
+                      ✦ elaborar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setSugestao(null); setRaciocinio(null) }}
+                    style={{ fontSize: 11, padding: "1px 6px", borderRadius: 99, background: "transparent", border: "1px solid #e5e7eb", color: "#9ca3af", cursor: "pointer" }}>
+                    ✕
+                  </button>
                 </div>
+              </div>
+
+              {sugestaoLoading ? (
+                <div style={{ padding: "10px 12px", fontSize: 12, color: "#c4b5fd", fontStyle: "italic" }}>Gerando sugestão...</div>
+              ) : (
+                <>
+                  {/* Raciocínio do agente */}
+                  {raciocinio && (
+                    <div style={{ padding: "6px 12px", background: "#faf5ff", borderBottom: "1px solid #ede9fe" }}>
+                      <div style={{ fontSize: 11, color: "#7c3aed", lineHeight: 1.5, opacity: 0.85 }}>
+                        💭 {raciocinio}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resposta sugerida */}
+                  <div
+                    onClick={() => setText(sugestao!)}
+                    title="Clique para editar no campo de texto"
+                    style={{ padding: "8px 12px", fontSize: 13, color: "#1e1b4b", lineHeight: 1.55, cursor: "pointer" }}
+                  >
+                    {sugestao}
+                  </div>
+
+                  {/* Ações */}
+                  <div style={{ padding: "4px 8px 6px", display: "flex", justifyContent: "flex-end", gap: 6, borderTop: "1px solid #f3f0ff" }}>
+                    <button
+                      onClick={() => { setText(sugestao!); setSugestao(null); setRaciocinio(null); setTimeout(() => inputRef.current?.focus(), 50) }}
+                      style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#f3f4f6", border: "1px solid #e5e7eb", color: "#374151", cursor: "pointer" }}>
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => enviar(sugestao!, true)}
+                      style={{ fontSize: 10, padding: "3px 10px", borderRadius: 99, background: "#7c3aed", border: "none", color: "#fff", cursor: "pointer", fontWeight: 600 }}>
+                      Usar ↵
+                    </button>
+                  </div>
+                </>
               )}
             </div>
-            {/* Botão recarregar sugestão */}
-            <button
-              onClick={() => gerarSugestao(messages, true)}
-              disabled={sugestaoLoading}
-              title="Gerar nova sugestão"
-              style={{ width: 28, height: 28, borderRadius: "50%", background: "#ede9fe", border: "1px solid #e9d5ff", color: "#7c3aed", fontSize: 12, cursor: "pointer", flexShrink: 0, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              ↺
-            </button>
-            {sugestao && (
-              <button onClick={() => setSugestao(null)}
-                style={{ width: 28, height: 28, borderRadius: "50%", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", flexShrink: 0, marginTop: 4 }}>
-                ✕
-              </button>
-            )}
           </div>
         )}
 
@@ -2056,8 +2111,9 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
         {elaborarOpen && (
           <ElaborarMensagemModal
             conv={conv}
-            onClose={() => setElaborarOpen(false)}
-            onUsarMensagem={msg => { setText(msg); setElaborarOpen(false); setTimeout(() => inputRef.current?.focus(), 50) }}
+            contextoInicial={elaborarContexto}
+            onClose={() => { setElaborarOpen(false); setElaborarContexto(null) }}
+            onUsarMensagem={msg => { setText(msg); setElaborarOpen(false); setElaborarContexto(null); setTimeout(() => inputRef.current?.focus(), 50) }}
           />
         )}
 
