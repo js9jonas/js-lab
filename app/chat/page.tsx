@@ -1595,9 +1595,21 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
     let es: EventSource | null = null
     let retries = 0
     let fallback: ReturnType<typeof setInterval> | null = null
+    let pingTimeout: ReturnType<typeof setTimeout> | null = null
+
+    function resetPingTimeout() {
+      if (pingTimeout) clearTimeout(pingTimeout)
+      // Se não chegar ping em 60s, a conexão está zumbi — força reconexão
+      pingTimeout = setTimeout(() => {
+        es?.close()
+        loadMessages()
+        setTimeout(connect, 1_000)
+      }, 60_000)
+    }
 
     function connect() {
       es = new EventSource(`/api/chat/sse?jid=${encodeURIComponent(conv.jid)}`)
+      resetPingTimeout()
 
       es.addEventListener("new_message", (e) => {
         const msg = JSON.parse((e as MessageEvent).data) as Message
@@ -1615,7 +1627,7 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
         setMessages(prev => prev.map(m => m.id === id ? { ...m, content } : m))
       })
 
-      es.addEventListener("ping", () => { retries = 0 })
+      es.addEventListener("ping", () => { retries = 0; resetPingTimeout() })
 
       es.onerror = () => {
         es?.close()
@@ -1623,13 +1635,18 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
         if (retries >= 3) {
           if (!fallback) fallback = setInterval(loadMessages, 10_000)
         } else {
+          loadMessages() // recupera mensagens perdidas durante o downtime
           setTimeout(connect, 3_000)
         }
       }
     }
 
     connect()
-    return () => { es?.close(); if (fallback) clearInterval(fallback) }
+    return () => {
+      es?.close()
+      if (fallback) clearInterval(fallback)
+      if (pingTimeout) clearTimeout(pingTimeout)
+    }
   }, [conv.jid, loadMessages])
 
   function enterSelectionMode(msg: Message) {

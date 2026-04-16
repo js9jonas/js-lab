@@ -86,7 +86,19 @@ export async function GET(req: NextRequest) {
         lastCheck = new Date()
         ticks++
 
-        // heartbeat a cada ~27s (9 ticks × 3s)
+        // Comentário HTTP a cada ~15s (5 ticks × 3s) — mantém conexão viva no Nginx/proxy
+        if (ticks % 5 === 0) {
+          try {
+            ctrl.enqueue(encoder.encode(": keep-alive\n\n"))
+          } catch {
+            // Controller morto — proxy fechou a conexão sem disparar abort
+            closed = true
+            removeConnection(jid, ctrl)
+            return
+          }
+        }
+
+        // Evento ping a cada ~27s (9 ticks × 3s) — cliente reseta contador de retries
         if (ticks % 9 === 0) {
           send(ctrl, "ping", {})
         }
