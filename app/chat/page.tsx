@@ -390,18 +390,6 @@ function MessageBubble({ msg, instance, isGroup, onReply, onForward, onDelete, s
 
   const rawImg = (() => {
     if (msg.message_type !== "imageMessage") return null
-    console.log("[img-debug] msg.id:", msg.id)
-    console.log("[img-debug] msg.media_url:", msg.media_url)
-    console.log("[img-debug] msg.raw type:", typeof msg.raw)
-    try {
-      const raw = msg.raw as Record<string, unknown>
-      console.log("[img-debug] raw keys:", Object.keys(raw))
-      console.log("[img-debug] raw.mediaUrl existe:", !!raw?.mediaUrl)
-      console.log("[img-debug] raw.mediaUrl início:",
-        typeof raw?.mediaUrl === "string" ? (raw.mediaUrl as string).slice(0, 50) : "não é string")
-    } catch (e) {
-      console.log("[img-debug] erro:", e)
-    }
     try {
       const raw = msg.raw as Record<string, unknown>
       // 1. raw.mediaUrl: base64 data URL (permanente, funciona no browser)
