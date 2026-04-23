@@ -1,19 +1,16 @@
 // app/api/evolution/webhook/route.ts
+// Endpoint configurado na Evolution API para receber todos os eventos.
 import { NextRequest, NextResponse } from "next/server"
+import { handleWebhookPost } from "@/lib/webhook-handler"
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json()
-    
-    // Aqui entra a lógica que já existia para processar os eventos
-    // (mensagens recebidas, status, etc.)
-    console.log("[Evolution Webhook]", JSON.stringify(body, null, 2))
+  return handleWebhookPost(req)
+}
 
-    // TODO: processar body.event e encaminhar para a lógica do chat
-
-    return NextResponse.json({ ok: true })
-  } catch (err) {
-    console.error("[Evolution Webhook] Erro:", err)
-    return NextResponse.json({ error: "invalid payload" }, { status: 400 })
-  }
+export async function GET() {
+  return NextResponse.json({
+    status: "online",
+    service: "js-lab webhook",
+    timestamp: new Date().toISOString(),
+  })
 }
