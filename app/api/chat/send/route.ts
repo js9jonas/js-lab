@@ -14,8 +14,10 @@ export async function POST(req: NextRequest) {
   const INSTANCE = instance ?? process.env.EVOLUTION_INSTANCE ?? "jsevolution"
 
   try {
-    // Envia pela Evolution API
-    const body: Record<string, unknown> = { number: jid, text }
+    // Evolution API espera o número puro, sem sufixo JID (@s.whatsapp.net)
+    const number = jid.endsWith("@s.whatsapp.net") ? jid.replace("@s.whatsapp.net", "") : jid
+
+    const body: Record<string, unknown> = { number, text }
     if (quoted) body.quoted = quoted
 
     const res = await fetch(
@@ -29,6 +31,12 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(body),
       }
     )
+
+    if (!res.ok) {
+      const err = await res.text()
+      console.error(`[send] Evolution API ${res.status}:`, err)
+      return NextResponse.json({ error: `Evolution API ${res.status}` }, { status: 502 })
+    }
 
     const data = await res.json() as { key?: { id?: string } }
     const msgId = data?.key?.id ?? `local_${Date.now()}`

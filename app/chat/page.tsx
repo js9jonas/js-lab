@@ -1723,10 +1723,15 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
         }
         body.quotedSenderName = senderName
       }
-      await fetch("/api/chat/send", {
+      const sendRes = await fetch("/api/chat/send", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
+      if (!sendRes.ok) {
+        setMessages(prev => prev.filter(m => m.id !== tempMsg.id))
+        alert("Falha ao enviar mensagem. Verifique a conexão com a Evolution API.")
+        return
+      }
 
       // Registra aprendizado se você digitou algo diferente da sugestão
       if (!ehSugestao && sugestao && sugestao !== conteudo && agenteIdRes) {
