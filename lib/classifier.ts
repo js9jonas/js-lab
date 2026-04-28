@@ -20,8 +20,6 @@ const PATTERNS: Record<MessageKind, RegExp[]> = {
   ],
   comando: [
     /^\/\w+/,         // começa com /
-    /^!\w+/,          // começa com !
-    /^#\w+/,          // começa com #
   ],
   texto_livre: [],    // fallback de texto
   audio: [],          // detectado pelo messageType
