@@ -2,7 +2,7 @@
 // Funções para chamar a Evolution API (envio de mensagens, download de mídia)
 // Usado pelos handlers — nunca chame a API diretamente nos handlers
 
-const EVOLUTION_URL = process.env.EVOLUTION_URL!
+const EVOLUTION_URL = (process.env.EVOLUTION_URL ?? "").replace(/\/$/, "")
 const EVOLUTION_KEY = process.env.EVOLUTION_KEY!
 
 async function evolutionFetch(

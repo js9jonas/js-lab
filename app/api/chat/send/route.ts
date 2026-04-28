@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   const INSTANCE = instance ?? process.env.EVOLUTION_INSTANCE ?? "jsevolution"
+  const EVOLUTION_URL = (process.env.EVOLUTION_URL ?? "").replace(/\/$/, "")
 
   try {
     // Evolution API espera o número puro, sem sufixo JID (@s.whatsapp.net)
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (quoted) body.quoted = quoted
 
     const res = await fetch(
-      `${process.env.EVOLUTION_URL}/message/sendText/${INSTANCE}`,
+      `${EVOLUTION_URL}/message/sendText/${INSTANCE}`,
       {
         method: "POST",
         headers: {
