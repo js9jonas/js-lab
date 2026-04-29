@@ -78,7 +78,7 @@ export async function handleLabel(
   labelId: string,
   action: "add" | "remove"
 ): Promise<void> {
-  await evolutionFetch(`/label/handleLabel/${instance}`, "PUT", {
+  await evolutionFetch(`/label/handleLabel/${instance}`, "POST", {
     number: jid,
     labelId,
     action,
