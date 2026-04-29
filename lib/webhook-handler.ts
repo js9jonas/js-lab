@@ -9,6 +9,7 @@ import { dispatch } from "@/lib/dispatcher"
 import { getMediaUrl } from "@/lib/evolution"
 import { logWebhook, query } from "@/lib/db"
 import { emit, emitGlobal } from "@/lib/sse-manager"
+import { maybeSyncLabels } from "@/lib/label-sync"
 
 async function persistChatMessage(payload: EvolutionPayload) {
   let jid        = payload.data?.key?.remoteJid
@@ -205,6 +206,12 @@ export async function handleWebhookPost(req: NextRequest): Promise<NextResponse>
 
   if (!isAudio) {
     persistChatMessage(payload).catch(console.error)
+  }
+
+  const fromMe = payload.data?.key?.fromMe ?? false
+  const incomingJid = payload.data?.key?.remoteJid ?? ""
+  if (!fromMe && incomingJid && !incomingJid.endsWith("@g.us")) {
+    maybeSyncLabels(incomingJid, payload.instance).catch(console.error)
   }
 
   return NextResponse.json({ ok: true, ...result })

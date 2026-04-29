@@ -44,6 +44,7 @@ export async function runMigrations() {
   `)
   await query(`CREATE INDEX IF NOT EXISTS idx_wh_received ON lab.webhook_logs (received_at DESC)`)
   await query(`CREATE INDEX IF NOT EXISTS idx_wh_kind ON lab.webhook_logs (kind)`)
+  await query(`ALTER TABLE public.contatos ADD COLUMN IF NOT EXISTS labels_sync_em TIMESTAMPTZ`)
   console.log("[db] migrations ok")
 }
 

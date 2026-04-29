@@ -7,7 +7,7 @@ const EVOLUTION_KEY = process.env.EVOLUTION_KEY!
 
 async function evolutionFetch(
   path: string,
-  method: "GET" | "POST" | "DELETE" = "GET",
+  method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
   body?: unknown
 ): Promise<unknown> {
   const res = await fetch(`${EVOLUTION_URL}${path}`, {
@@ -58,6 +58,31 @@ export async function getMediaUrl(
   } catch {
     return null
   }
+}
+
+// Labels de um chat (WhatsApp Business)
+export interface WaLabel {
+  id: string
+  name: string
+  color: number
+}
+
+export async function findLabels(instance: string): Promise<WaLabel[]> {
+  const data = await evolutionFetch(`/label/findLabels/${instance}`)
+  return Array.isArray(data) ? (data as WaLabel[]) : []
+}
+
+export async function handleLabel(
+  instance: string,
+  jid: string,
+  labelId: string,
+  action: "add" | "remove"
+): Promise<void> {
+  await evolutionFetch(`/label/handleLabel/${instance}`, "PUT", {
+    number: jid,
+    labelId,
+    action,
+  })
 }
 
 // Lista instâncias
