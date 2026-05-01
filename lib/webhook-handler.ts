@@ -209,8 +209,22 @@ export async function handleWebhookPost(req: NextRequest): Promise<NextResponse>
   }
 
   const fromMe = payload.data?.key?.fromMe ?? false
-  const incomingJid = payload.data?.key?.remoteJid ?? ""
-  if (!fromMe && incomingJid && !incomingJid.endsWith("@g.us")) {
+  let incomingJid = payload.data?.key?.remoteJid ?? ""
+
+  if (incomingJid.endsWith("@lid")) {
+    const pushName = payload.data?.pushName
+    if (pushName) {
+      const found = await query<{ jid: string }>(
+        `SELECT jid FROM lab.conversations
+         WHERE profile_name = $1 AND instance = $2 AND jid LIKE '%@s.whatsapp.net'
+         LIMIT 1`,
+        [pushName, payload.instance]
+      )
+      if (found.length === 1) incomingJid = found[0].jid
+    }
+  }
+
+  if (!fromMe && incomingJid && !incomingJid.endsWith("@g.us") && !incomingJid.endsWith("@lid")) {
     maybeSyncLabels(incomingJid, payload.instance).catch(console.error)
   }
 
