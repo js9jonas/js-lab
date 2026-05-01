@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
+import VoiceInputButton from "@/components/chat/VoiceInputButton"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -653,6 +654,7 @@ function TabRefinamento({ agente, onPromptSalvo, onModuloSalvo }: {
           style={{ flex: 1, resize: "none", padding: "9px 12px", fontSize: 13, borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-base)", color: "var(--text-primary)", outline: "none", lineHeight: 1.5 }}
         />
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <VoiceInputButton value={input} onChange={setInput} size={40} />
           <button onClick={handleSend} disabled={!input.trim() || sending}
             style={{ width: 40, height: 40, borderRadius: "50%", background: input.trim() ? "#2563eb" : "var(--bg-elevated)", border: "none", color: input.trim() ? "#fff" : "var(--text-muted)", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
             ➤
