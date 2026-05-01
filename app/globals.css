@@ -2,6 +2,12 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+  50%       { box-shadow: 0 0 0 7px rgba(220, 38, 38, 0); }
+}
+.mic-pulse { animation: micPulse 0.9s ease-in-out infinite; }
+
 :root {
   /* Fundos */
   --bg-base:      #f0f2f5;

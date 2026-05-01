@@ -12,6 +12,7 @@ import PdfPreview from "@/components/chat/PdfPreview"
 import QuickRepliesModal from "@/components/chat/QuickRepliesModal"
 import StickerBubble from "@/components/chat/StickerBubble"
 import StickerPreview from "@/components/chat/StickerPreview"
+import VoiceInputButton from "@/components/chat/VoiceInputButton"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -1346,6 +1347,7 @@ function AgenteRefinamentoModal({ conv, onClose }: { conv: Conversation; onClose
               rows={2}
               style={{ flex: 1, resize: "none", padding: "9px 12px", fontSize: 13, borderRadius: 10, border: "1px solid #e2e8f0", outline: "none", lineHeight: 1.5, fontFamily: "inherit" }}
             />
+            <VoiceInputButton value={input} onChange={setInput} size={40} />
             <button
               onClick={handleSend}
               disabled={!input.trim() || sending}
@@ -1492,6 +1494,7 @@ function ElaborarMensagemModal({ conv, onClose, onUsarMensagem, contextoInicial 
             rows={2}
             style={{ flex: 1, resize: "none", padding: "9px 12px", fontSize: 13, borderRadius: 10, border: "1px solid #e2e8f0", outline: "none", lineHeight: 1.5, fontFamily: "inherit" }}
           />
+          <VoiceInputButton value={input} onChange={setInput} size={40} />
           <button
             onClick={handleSend}
             disabled={!input.trim() || sending}
@@ -2224,6 +2227,7 @@ function MessagesArea({ conv, onOpenConversation }: { conv: Conversation; onOpen
             style={{ flex: 1, resize: "none", borderRadius: 24, padding: "10px 16px", fontSize: 13, background: "#fff", border: "none", maxHeight: 120, lineHeight: 1.5, overflowY: "auto", outline: "none", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
             onInput={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px" }}
           />
+          <VoiceInputButton value={text} onChange={handleTextChange} size={36} />
           <button onClick={handleSend} disabled={!botaoAtivo || sending}
             style={{ width: 42, height: 42, borderRadius: "50%", background: botaoAtivo ? "#16a34a" : "#ccc", border: "none", color: "#fff", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}>
             ➤
