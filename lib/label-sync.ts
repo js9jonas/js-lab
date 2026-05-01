@@ -55,8 +55,8 @@ export async function maybeSyncLabels(jid: string, instance: string): Promise<vo
 
   const phones = jidToPhones(jid)
 
-  const contacts = await query<{ id_cliente: string; labels_sync_em: Date | null }>(
-    `SELECT id_cliente, labels_sync_em
+  const contacts = await query<{ id_cliente: string; labels_sync_em: Date | null; telefone: string }>(
+    `SELECT id_cliente, labels_sync_em, telefone
      FROM public.contatos
      WHERE telefone = ANY($1)
      LIMIT 1`,
@@ -65,7 +65,7 @@ export async function maybeSyncLabels(jid: string, instance: string): Promise<vo
 
   if (!contacts.length) return
 
-  const { id_cliente, labels_sync_em } = contacts[0]
+  const { id_cliente, labels_sync_em, telefone } = contacts[0]
 
   // Já sincronizado hoje → pula
   if (labels_sync_em) {
@@ -97,8 +97,8 @@ export async function maybeSyncLabels(jid: string, instance: string): Promise<vo
     }
 
     const action = activePanels.has(panel) ? "add" : "remove"
-    await handleLabel(instance, jid, label.id, action).catch((err: Error) =>
-      console.error(`[label-sync] ${action} '${label.name}' → ${jid}: ${err.message}`)
+    await handleLabel(instance, telefone, label.id, action).catch((err: Error) =>
+      console.error(`[label-sync] ${action} '${label.name}' → ${telefone}: ${err.message}`)
     )
   }
 

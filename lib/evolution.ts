@@ -60,29 +60,37 @@ export async function getMediaUrl(
   }
 }
 
-// Labels de um chat (WhatsApp Business)
+// Labels de um chat (WhatsApp Business) — implementado via Z-API
 export interface WaLabel {
   id: string
   name: string
   color: number
 }
 
-export async function findLabels(instance: string): Promise<WaLabel[]> {
-  const data = await evolutionFetch(`/label/findLabels/${instance}`)
+const ZAPI_BASE = () => (process.env.ZAPI_BASE_URL ?? "").replace(/\/$/, "")
+const ZAPI_TOKEN = () => process.env.ZAPI_CLIENT_TOKEN ?? ""
+
+async function zapiFetch(path: string, method: "GET" | "PUT" = "GET"): Promise<unknown> {
+  const res = await fetch(`${ZAPI_BASE()}${path}`, {
+    method,
+    headers: { "Client-Token": ZAPI_TOKEN() },
+  })
+  if (!res.ok) throw new Error(`Z-API ${res.status}: ${await res.text()}`)
+  return res.json()
+}
+
+export async function findLabels(_instance: string): Promise<WaLabel[]> {
+  const data = await zapiFetch("/tags")
   return Array.isArray(data) ? (data as WaLabel[]) : []
 }
 
 export async function handleLabel(
-  instance: string,
-  jid: string,
+  _instance: string,
+  phone: string,
   labelId: string,
   action: "add" | "remove"
 ): Promise<void> {
-  await evolutionFetch(`/label/handleLabel/${instance}`, "POST", {
-    number: jid,
-    labelId,
-    action,
-  })
+  await zapiFetch(`/chats/${phone}/tags/${labelId}/${action}`, "PUT")
 }
 
 // Lista instâncias
