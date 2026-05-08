@@ -30,26 +30,23 @@ export async function POST(req: NextRequest) {
     let nota_discussao: string | null = null
 
     try {
-      const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          "x-api-key": process.env.ANTHROPIC_API_KEY!,
+          "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content: `Classifique este registro de aprendizado de um agente de atendimento WhatsApp.
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 256,
+          system: `Classifique este registro de aprendizado de um agente de atendimento WhatsApp.
 Responda SOMENTE um JSON: {"tipo":"correcao|lacuna|insight","requer_discussao":true|false,"nota":"motivo breve se requer_discussao=true, senão null"}
 - correcao: agente deu informação errada ou tom inadequado
 - lacuna: agente não sabia sobre o assunto (preço, produto, procedimento)
 - insight: ambas razoáveis, usuário melhorou a abordagem
 requer_discussao=true quando a diferença revela ambiguidade que precisa ser esclarecida no refinamento.`,
-            },
+          messages: [
             {
               role: "user",
               content: `Agente sugeriu: "${sugestao_ia}"\nUsuário enviou: "${resposta_real}"`,
@@ -57,8 +54,8 @@ requer_discussao=true quando a diferença revela ambiguidade que precisa ser esc
           ],
         }),
       })
-      const data = await apiRes.json() as { choices?: { message: { content: string } }[] }
-      const texto = data.choices?.[0]?.message?.content?.trim() ?? ""
+      const data = await apiRes.json() as { content?: { type: string; text: string }[] }
+      const texto = data.content?.[0]?.text?.trim() ?? ""
       const classificacao = JSON.parse(texto) as { tipo: typeof tipo; requer_discussao: boolean; nota: string | null }
       tipo = classificacao.tipo ?? "lacuna"
       requer_discussao = classificacao.requer_discussao ?? false

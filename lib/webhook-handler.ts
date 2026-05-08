@@ -107,6 +107,16 @@ export async function handleWebhookPost(req: NextRequest): Promise<NextResponse>
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
+  // Forward para n8n (fire-and-forget — não bloqueia nem falha se n8n estiver fora)
+  const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL
+  if (n8nWebhookUrl) {
+    fetch(n8nWebhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(raw),
+    }).catch(() => {})
+  }
+
   if (raw.event === "messages.update") {
     const dataArr = Array.isArray(raw.data) ? raw.data : [raw.data]
     for (const upd of dataArr) {
