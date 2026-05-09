@@ -110,11 +110,12 @@ export async function handleWebhookPost(req: NextRequest): Promise<NextResponse>
   // Forward para n8n (fire-and-forget — não bloqueia nem falha se n8n estiver fora)
   const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL
   if (n8nWebhookUrl) {
+    console.log("[n8n-forward] enviando para:", n8nWebhookUrl, "| event:", raw.event)
     fetch(n8nWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(raw),
-    }).catch(() => {})
+    }).then(r => console.log("[n8n-forward] status:", r.status)).catch(e => console.error("[n8n-forward] erro:", e?.message))
   }
 
   if (raw.event === "messages.update") {
