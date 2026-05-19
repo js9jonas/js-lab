@@ -29,6 +29,12 @@ const NAV = [
     ],
   },
   {
+    group: "Ferramentas",
+    items: [
+      { href: "/rifas", label: "Rifas", icon: "🎟", color: "#16a34a" },
+    ],
+  },
+  {
     group: "Em breve",
     items: [
       { href: "/recibo", label: "Recibo PDF", icon: "◫", color: "#f59e0b", soon: true },
