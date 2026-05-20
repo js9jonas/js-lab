@@ -73,7 +73,7 @@ export default function RifaPrintLayout({ rifa, organizacao, premios = [], somen
   const showPaginas = paginasRender.filter(Boolean)
 
   // Página de controle de distribuição
-  const LINHAS_POR_CTRL = 33
+  const LINHAS_POR_CTRL = 28
   const folhasControle = paginas.map((nums, idx) => ({
     num: idx + 1,
     inicio: nums[0],
