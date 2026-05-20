@@ -72,6 +72,18 @@ export default function RifaPrintLayout({ rifa, organizacao, premios = [], somen
   const paginasRender = somentePagina !== undefined ? [paginas[somentePagina] ?? []] : paginas
   const showPaginas = paginasRender.filter(Boolean)
 
+  // Página de controle de distribuição
+  const LINHAS_POR_CTRL = 33
+  const folhasControle = paginas.map((nums, idx) => ({
+    num: idx + 1,
+    inicio: nums[0],
+    fim: nums[nums.length - 1],
+  }))
+  const paginasControle: typeof folhasControle[] = []
+  for (let i = 0; i < folhasControle.length; i += LINHAS_POR_CTRL) {
+    paginasControle.push(folhasControle.slice(i, i + LINHAS_POR_CTRL))
+  }
+
   // Distribuição dos prêmios em colunas
   const cols = Math.max(1, Math.min(4, colunas_premios))
   const premiosPorColuna = Math.ceil(premios.length / cols)
@@ -165,6 +177,7 @@ export default function RifaPrintLayout({ rifa, organizacao, premios = [], somen
   )
 
   return (
+    <>
     <div style={{ fontFamily, width: pageW, margin: "0 auto" }}>
       {showPaginas.map((pagNums, pi) => (
         <div
@@ -215,5 +228,89 @@ export default function RifaPrintLayout({ rifa, organizacao, premios = [], somen
         </div>
       ))}
     </div>
+
+    {/* Páginas de controle de distribuição — só no print completo */}
+    {somentePagina === undefined && paginasControle.map((linhas, ci) => (
+      <div
+        key={`ctrl-${ci}`}
+        className="rifa-page-gap"
+        style={{
+          pageBreakBefore: "always",
+          breakBefore: "page",
+          padding: "10mm",
+          background: "#fff",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+          marginBottom: ci < paginasControle.length - 1 ? 28 : 0,
+          width: "210mm",
+          margin: "0 auto",
+          fontFamily,
+        }}
+      >
+        {/* Cabeçalho */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{
+            fontSize: 13,
+            fontWeight: 700,
+            textAlign: "center",
+            borderBottom: "2px solid #333",
+            paddingBottom: 4,
+            marginBottom: 4,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}>
+            Controle de Distribuição
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 600, textAlign: "center" }}>{titulo}</div>
+          {organizacao && (
+            <div style={{ fontSize: 9, textAlign: "center", color: "#555" }}>{organizacao.nome}</div>
+          )}
+          {data_sorteio && (
+            <div style={{ fontSize: 9, textAlign: "center", color: "#555" }}>
+              Sorteio: {formatData(data_sorteio)}
+            </div>
+          )}
+          {paginasControle.length > 1 && (
+            <div style={{ fontSize: 8, textAlign: "right", color: "#999", marginTop: 2 }}>
+              Página {ci + 1} de {paginasControle.length}
+            </div>
+          )}
+        </div>
+
+        {/* Tabela */}
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9 }}>
+          <thead>
+            <tr style={{ background: "#333", color: "#fff" }}>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "center", width: 36 }}>Folha</th>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "center", width: 52 }}>N° início</th>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "center", width: 52 }}>N° fim</th>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "left" }}>Responsável</th>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "center", width: 105 }}>Telefone</th>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "center", width: 52 }}>Entregue</th>
+              <th style={{ padding: "4px 5px", border: "1px solid #555", textAlign: "center", width: 85 }}>Valor Recebido</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((folha, i) => (
+              <tr key={folha.num} style={{ background: i % 2 === 1 ? "#f5f5f5" : "#fff" }}>
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc", textAlign: "center", fontWeight: 700 }}>
+                  {String(folha.num).padStart(2, "0")}
+                </td>
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc", textAlign: "center" }}>
+                  {formatNumero(folha.inicio, numero_inicial + quantidade_total - 1)}
+                </td>
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc", textAlign: "center" }}>
+                  {formatNumero(folha.fim, numero_inicial + quantidade_total - 1)}
+                </td>
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc" }} />
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc" }} />
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc", textAlign: "center" }}>☐</td>
+                <td style={{ padding: "5px 5px", border: "1px solid #ccc", fontSize: 8, color: "#999", paddingLeft: 7 }}>R$</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ))}
+    </>
   )
 }
