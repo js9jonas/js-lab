@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
               SELECT id, jid, from_me, message_type, content, media_url, status,
                      timestamp::text, raw
               FROM lab.messages
-              WHERE jid = $1 AND timestamp > $2
+              WHERE jid = $1 AND created_at > $2
               ORDER BY timestamp ASC
             `, [jid, lastCheck])
 
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
         lastCheck = new Date()
         ticks++
 
-        // Comentário HTTP a cada ~15s (5 ticks × 3s) — mantém conexão viva no Nginx/proxy
+        // Comentário HTTP a cada ~10s (5 ticks × 2s) — mantém conexão viva no Nginx/proxy
         if (ticks % 5 === 0) {
           try {
             ctrl.enqueue(encoder.encode(": keep-alive\n\n"))
@@ -98,15 +98,15 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Evento ping a cada ~27s (9 ticks × 3s) — cliente reseta contador de retries
+        // Evento ping a cada ~18s (9 ticks × 2s) — cliente reseta contador de retries
         if (ticks % 9 === 0) {
           send(ctrl, "ping", {})
         }
 
-        if (!closed) setTimeout(poll, 3_000)
+        if (!closed) setTimeout(poll, 2_000)
       }
 
-      setTimeout(poll, 3_000)
+      setTimeout(poll, 2_000)
     },
   })
 
