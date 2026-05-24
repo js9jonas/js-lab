@@ -80,6 +80,7 @@ async function zapiFetch(path: string, method: "GET" | "PUT" = "GET"): Promise<u
 }
 
 export async function findLabels(_instance: string): Promise<WaLabel[]> {
+  if (!ZAPI_BASE()) return []
   const data = await zapiFetch("/tags")
   return Array.isArray(data) ? (data as WaLabel[]) : []
 }
