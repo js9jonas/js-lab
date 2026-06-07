@@ -29,7 +29,7 @@ export default function CoExPage() {
 
     window.fbAsyncInit = function () {
       window.FB.init({
-        appId: process.env.NEXT_PUBLIC_META_APP_ID,
+        appId: "1060517628167041",
         version: "v21.0",
       })
     }
@@ -76,7 +76,7 @@ export default function CoExPage() {
         }
       },
       {
-        config_id: process.env.NEXT_PUBLIC_META_CONFIG_ID,
+        config_id: "1022901824010896",
         response_type: "code",
         override_default_response_type: true,
         extras: {
