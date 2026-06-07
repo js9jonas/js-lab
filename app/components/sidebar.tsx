@@ -20,6 +20,7 @@ const NAV = [
     items: [
       { href: "/evolution", label: "Instâncias", icon: "◉", color: "#14b8a6" },
       { href: "/comandos",  label: "Comandos",   icon: "◈", color: "#2563eb" },
+      { href: "/coex",      label: "CoEx",        icon: "◎", color: "#1877f2" },
     ],
   },
   {
