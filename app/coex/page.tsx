@@ -41,11 +41,11 @@ export default function CoExPage() {
     document.body.appendChild(script)
   }, [])
 
-  async function handleActivate() {
+  function handleActivate() {
     setStatus({ type: "waiting" })
 
     window.FB.login(
-      async (res) => {
+      (res) => {
         if (!res.authResponse?.code) {
           setStatus({ type: "error", message: "Login cancelado ou sem código retornado." })
           return
@@ -53,27 +53,26 @@ export default function CoExPage() {
 
         setStatus({ type: "processing" })
 
-        try {
-          const r = await fetch("/api/coex/activate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: res.authResponse.code }),
+        fetch("/api/coex/activate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: res.authResponse.code }),
+        })
+          .then((r) => r.json().then((data: Record<string, string>) => ({ r, data })))
+          .then(({ r, data }) => {
+            if (!r.ok) {
+              setStatus({ type: "error", message: data.error ?? "Erro desconhecido no servidor." })
+              return
+            }
+            setStatus({
+              type: "success",
+              phoneNumberId: data.phoneNumberId ?? "(não retornado)",
+              wabaId: data.wabaId ?? "(não retornado)",
+            })
           })
-          const data = await r.json()
-
-          if (!r.ok) {
-            setStatus({ type: "error", message: data.error ?? "Erro desconhecido no servidor." })
-            return
-          }
-
-          setStatus({
-            type: "success",
-            phoneNumberId: data.phoneNumberId ?? "(não retornado)",
-            wabaId: data.wabaId ?? "(não retornado)",
+          .catch((e: unknown) => {
+            setStatus({ type: "error", message: String(e) })
           })
-        } catch (e) {
-          setStatus({ type: "error", message: String(e) })
-        }
       },
       {
         config_id: "1022901824010896",
