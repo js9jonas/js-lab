@@ -2,6 +2,9 @@ import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Atrás do Traefik/Easypanel — sem isso o auth.js rejeita o host com
+  // UntrustedHost e o middleware falha aberto (bloqueio inteiro ignorado).
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
