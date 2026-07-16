@@ -1,36 +1,34 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { auth } from "@/auth"
 
-// Rotas chamadas por serviços externos que não conseguem enviar Basic Auth —
-// precisam ficar acessíveis sem senha. Tudo mais no app exige autenticação.
+// Rotas chamadas por serviços externos que não conseguem passar sessão —
+// precisam ficar acessíveis sem login. Tudo mais no app exige autenticação Google.
 const PUBLIC_PATHS = [
   "/api/webhook",
   "/api/evolution/webhook",
   "/api/coex/activate",
   "/api/alexa",
+  "/login",
+  "/api/auth",
 ]
 
-export function middleware(req: NextRequest) {
+export default auth((req) => {
   const { pathname } = req.nextUrl
 
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     return NextResponse.next()
   }
 
-  const user = process.env.LAB_AUTH_USER
-  const pass = process.env.LAB_AUTH_PASS
-
-  const expected = "Basic " + Buffer.from(`${user}:${pass}`).toString("base64")
-  const provided = req.headers.get("authorization")
-
-  if (provided === expected) {
+  if (req.auth) {
     return NextResponse.next()
   }
 
-  return new NextResponse("Autenticação necessária", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="js-lab"' },
-  })
-}
+  if (pathname.startsWith("/api")) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+  }
+
+  return NextResponse.redirect(new URL("/login", req.url))
+})
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
