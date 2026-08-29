@@ -36,7 +36,7 @@ function Modal({ item, onClose, onSave }: {
     })
     const [saving, setSaving] = useState(false)
 
-    const field = (key: keyof typeof form, label: string, type = "text", extra?: React.InputHTMLAttributes<HTMLInputElement>) => (
+    const field = (key: keyof typeof form, label: string, type = "text", extra?: React.InputHTMLAttributes<HTMLInputElement>, sanitize?: (v: string) => string) => (
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.05em" }}>
                 {label.toUpperCase()}
@@ -44,12 +44,15 @@ function Modal({ item, onClose, onSave }: {
             <input
                 type={type}
                 value={String(form[key])}
-                onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                onChange={e => setForm(f => ({ ...f, [key]: sanitize ? sanitize(e.target.value) : e.target.value }))}
                 style={{ background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
                 {...extra}
             />
         </div>
     )
+
+    // remove tudo que não for dígito (espaços, "-", "+", parênteses etc.) — usado no colar do telefone
+    const soDigitos = (v: string) => v.replace(/\D/g, "")
 
     return (
         <div style={{ position: "fixed", inset: 0, background: "#00000066", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}
@@ -64,7 +67,7 @@ function Modal({ item, onClose, onSave }: {
 
                 {/* Campos */}
                 {field("nome", "Nome completo")}
-                {field("telefone", "WhatsApp", "text", { placeholder: "5551999999999" })}
+                {field("telefone", "WhatsApp", "text", { placeholder: "5551999999999" }, soDigitos)}
                 {field("data_nasc", "Data de nascimento", "date")}
                 {field("grupo", "Grupo")}
                 {field("observacao", "Observação")}
