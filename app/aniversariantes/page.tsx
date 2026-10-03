@@ -100,6 +100,125 @@ function Modal({ item, onClose, onSave }: {
     )
 }
 
+// ─── Sincronização com o cadastro de membros (js-comunidade) ───────────────────
+
+type PlanoSync = {
+    entram: { ref: string; nome: string; data_nasc: string; telefone: string | null; origem_tel: string | null; dependente_de: string | null }[]
+    saem: { id: number; nome: string; motivo: string }[]
+    nomes: { id: number; de: string; para: string }[]
+    telefones: { id: number; nome: string; de: string | null; para: string; origem: string }[]
+    datas_diferentes: { id: number; nome: string; lista: string; cadastro: string }[]
+    vincular: { id: number; ref: string }[]
+    sem_data_nascimento: number
+    sem_telefone_depois: number
+    assinatura: string
+}
+
+const fmtData = (d: string) => d.split("-").reverse().join("/")
+const fmtTel = (t: string | null) => (t ? `(${t.slice(2, 4)}) ${t.slice(4, -4)}-${t.slice(-4)}` : "sem telefone")
+
+function ModalSincronizar({ onClose, onAplicado }: { onClose: () => void; onAplicado: (msg: string) => void }) {
+    const [plano, setPlano] = useState<PlanoSync | null>(null)
+    const [erro, setErro] = useState("")
+    const [aplicando, setAplicando] = useState(false)
+
+    const carregar = useCallback(async () => {
+        setErro(""); setPlano(null)
+        try {
+            const res = await fetch("/api/aniversariantes/sincronizar")
+            const data = await res.json()
+            if (!res.ok) { setErro(data.error || "Não foi possível calcular a sincronização."); return }
+            setPlano(data)
+        } catch { setErro("Falha de conexão. Tente de novo.") }
+    }, [])
+    useEffect(() => { carregar() }, [carregar])
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !aplicando) onClose() }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [onClose, aplicando])
+
+    async function aplicar() {
+        if (!plano) return
+        setAplicando(true); setErro("")
+        try {
+            const res = await fetch("/api/aniversariantes/sincronizar", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assinatura: plano.assinatura }),
+            })
+            const data = await res.json()
+            if (res.status === 409) { setErro(data.error); carregar(); return }
+            if (!res.ok) { setErro(data.error || "Erro ao aplicar."); return }
+            onAplicado(`Sincronizado: ${data.entraram} entraram, ${data.sairam} saíram, ${data.telefones} telefones e ${data.nomes} nomes atualizados.`)
+        } catch { setErro("Falha de conexão. Tente de novo.") }
+        finally { setAplicando(false) }
+    }
+
+    const temMudanca = !!plano && (plano.entram.length + plano.saem.length + plano.nomes.length + plano.telefones.length + plano.vincular.length) > 0
+    const secao = (titulo: string, cor: string, itens: React.ReactNode[]) => itens.length === 0 ? null : (
+        <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: cor, marginBottom: 6 }}>{titulo} ({itens.length})</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12, color: "var(--text-primary)" }}>{itens}</div>
+        </div>
+    )
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 14, width: "100%", maxWidth: 640, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 15, fontWeight: 600 }}>Sincronizar com o cadastro de membros</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
+                        Grupo MEMBRO CRUZEIRO × cadastro do js-comunidade. Confira as mudanças; nada é gravado até clicar em Aplicar.
+                    </div>
+                </div>
+                <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
+                    {!plano && !erro && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Calculando…</div>}
+                    {plano && !temMudanca && (
+                        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>A lista já está igual ao cadastro. Nada para mudar.</div>
+                    )}
+                    {plano && <>
+                        {secao("Entram", "#16a34a", plano.entram.map(e => (
+                            <div key={e.ref}>{e.nome} · {fmtData(e.data_nasc)} · {fmtTel(e.telefone)}
+                                {e.origem_tel === "titular" ? " (do titular)" : ""}{e.dependente_de ? ` · dependente de ${e.dependente_de}` : ""}</div>
+                        )))}
+                        {secao("Saem", "#dc2626", plano.saem.map(s => <div key={s.id}>{s.nome} · {s.motivo}</div>))}
+                        {secao("Nome atualizado conforme o cadastro", "#2563eb", plano.nomes.map(n => <div key={n.id}>{n.de} → {n.para}</div>))}
+                        {secao("Telefone", "#2563eb", plano.telefones.map(t => (
+                            <div key={t.id}>{t.nome}: {t.de ? `${t.de} → ` : ""}{fmtTel(t.para)} ({t.origem === "titular" ? "do titular" : t.origem})</div>
+                        )))}
+                        {secao("Data diferente do cadastro (não muda; a lista é que vale)", "#d97706", plano.datas_diferentes.map(d => (
+                            <div key={d.id}>{d.nome}: lista {d.lista} · cadastro {d.cadastro}</div>
+                        )))}
+                        {plano.vincular.length > 0 && (
+                            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
+                                {plano.vincular.length} registros serão ligados ao cadastro (as próximas sincronizações não dependem do nome).
+                            </div>
+                        )}
+                        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                            {plano.sem_data_nascimento > 0 && <div>{plano.sem_data_nascimento} membros ativos sem data de nascimento no cadastro não entram na lista.</div>}
+                            <div>Depois de aplicar, {plano.sem_telefone_depois} ficam sem telefone com WhatsApp.</div>
+                        </div>
+                    </>}
+                    {erro && <div style={{ marginTop: 12, fontSize: 13, color: "#dc2626" }}>{erro}</div>}
+                </div>
+                <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button onClick={onClose} disabled={aplicando}
+                        style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text-primary)", fontSize: 13, cursor: "pointer" }}>
+                        {temMudanca ? "Cancelar" : "Fechar"}
+                    </button>
+                    {temMudanca && (
+                        <button onClick={aplicar} disabled={aplicando}
+                            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 600, cursor: aplicando ? "progress" : "pointer", opacity: aplicando ? 0.6 : 1 }}>
+                            {aplicando ? "Aplicando…" : "Aplicar"}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ─── Página principal ──────────────────────────────────────────────────────────
 
 export default function AniversariantesPage() {
@@ -110,6 +229,8 @@ export default function AniversariantesPage() {
     const [soAtivos, setSoAtivos] = useState(true)
     const [loading, setLoading] = useState(true)
     const [modal, setModal] = useState<Partial<Aniversariante> | null | false>(false)
+    const [sincronizando, setSincronizando] = useState(false)
+    const [aviso, setAviso] = useState("")
 
     // ── grupos únicos para o select ──
     const grupos = Array.from(new Set(lista.map(a => a.grupo).filter(Boolean) as string[])).sort()
@@ -190,12 +311,32 @@ export default function AniversariantesPage() {
                         Cadastro e controle de datas de nascimento
                     </div>
                 </div>
-                <button
-                    onClick={() => setModal({})}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                    + Adicionar
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                        onClick={() => setSincronizando(true)}
+                        title="Confere quem entrou e quem saiu do grupo MEMBRO CRUZEIRO no cadastro de membros"
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                        ⟳ Sincronizar com cadastro
+                    </button>
+                    <button
+                        onClick={() => setModal({})}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                        + Adicionar
+                    </button>
+                </div>
             </div>
+            {aviso && (
+                <div style={{ padding: "10px 28px", background: "rgba(22,163,74,.12)", color: "#16a34a", fontSize: 13, display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <span>{aviso}</span>
+                    <button onClick={() => setAviso("")} style={{ border: "none", background: "transparent", color: "inherit", cursor: "pointer" }}>✕</button>
+                </div>
+            )}
+            {sincronizando && (
+                <ModalSincronizar
+                    onClose={() => setSincronizando(false)}
+                    onAplicado={msg => { setSincronizando(false); setAviso(msg); carregar() }}
+                />
+            )}
 
             {/* ── Conteúdo ── */}
             <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
