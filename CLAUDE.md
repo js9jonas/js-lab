@@ -69,3 +69,7 @@ Login via Google (next-auth v5, `auth.ts` na raiz), restrito a `js9jonas@gmail.c
 ## Modelo em uso
 
 `claude-sonnet-4-6` em todas as rotas (sugestão, aprendizado, refinamento, análise-multi).
+
+## Memória do projeto
+
+Fica fora do repo (repo público; as notas têm dados pessoais): `~/.claude/projects/-home-jonas/memory/js-lab/README.md` (índice). Ler antes de mexer em áreas cobertas por decisões/incidentes passados. Nunca copiar essas notas pra dentro do repo.
