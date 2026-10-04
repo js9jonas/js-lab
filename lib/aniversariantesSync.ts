@@ -17,7 +17,7 @@ const DDDS = new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 27, 28, 31
   47, 48, 49, 51, 53, 54, 55, 61, 62, 63, 64, 65, 66, 67, 68, 69, 71, 73, 74, 75, 77, 79, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91,
   92, 93, 94, 95, 96, 97, 98, 99])
 
-const normalizarNome = (n: string) => n.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, " ")
+export const normalizarNome = (n: string) => n.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, " ")
 
 function distancia(a: string, b: string) {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)])
@@ -29,7 +29,7 @@ function distancia(a: string, b: string) {
 }
 
 /** Mesmo critério do aviso de nome parecido do js-comunidade (letra trocada ou nome a mais/a menos). */
-function nomesParecidos(a: string, b: string) {
+export function nomesParecidos(a: string, b: string) {
   const pa = normalizarNome(a).split(" ").filter(p => p && !PARTICULAS.has(p))
   const pb = normalizarNome(b).split(" ").filter(p => p && !PARTICULAS.has(p))
   if (pa.length < 2 || pb.length < 2) return false

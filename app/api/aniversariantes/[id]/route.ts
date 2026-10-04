@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/db"
+import { dataComAno } from "@/lib/aniversariantesImport"
 
 // PATCH /api/aniversariantes/[id]
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -7,29 +8,38 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id: rawId } = await params
     const id   = Number(rawId)
     const body = await req.json()
-    const { nome, telefone, data_nasc, grupo, ativo, observacao } = body
+    const { nome, telefone, grupo, ativo, observacao } = body
+    // ano_desconhecido só muda quando vem junto com a data (o modal sempre manda os dois)
+    const anoDesconhecido: boolean | null = typeof body.ano_desconhecido === "boolean" && body.data_nasc ? body.ano_desconhecido : null
+    const data_nasc = body.data_nasc ? dataComAno(String(body.data_nasc), anoDesconhecido === true) : null
 
     const sql = `
       UPDATE lab.aniversariantes
       SET
         nome          = COALESCE($1, nome),
-        telefone      = $2,
+        telefone      = CASE WHEN $9 THEN $2 ELSE telefone END,
         data_nasc     = COALESCE($3, data_nasc),
         grupo         = COALESCE($4, grupo),
         ativo         = COALESCE($5, ativo),
-        observacao    = $6,
+        observacao    = CASE WHEN $10 THEN $6 ELSE observacao END,
+        ano_desconhecido = COALESCE($8, ano_desconhecido),
         atualizado_em = NOW()
       WHERE id = $7
       RETURNING *
     `
     const rows = await query(sql, [
       nome ?? null,
-      telefone ?? null,
+      telefone?.trim() || null,
       data_nasc ?? null,
       grupo ?? null,
       ativo ?? null,
-      observacao ?? null,
+      observacao?.trim() || null,
       id,
+      anoDesconhecido,
+      // Só mexe em telefone/observação quando vieram no corpo — o botão de ativo da lista manda
+      // só { ativo } e antes apagava os dois (achado 03/10/2026)
+      "telefone" in body,
+      "observacao" in body,
     ])
 
     if (!rows.length) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })

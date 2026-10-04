@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { GRUPOS, GRUPOS_IMPORTAVEIS, type PlanoImport } from "@/lib/aniversariantesImport"
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -12,11 +13,13 @@ interface Aniversariante {
     grupo: string | null
     ativo: boolean
     observacao: string | null
-    idade: number
+    idade: number | null     // null quando o ano é desconhecido
+    ano_desconhecido: boolean
     dia_mes: string          // "04/01"
 }
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+const MESES_LONGOS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
 // ─── Modal de Edição / Criação ─────────────────────────────────────────────────
 
@@ -33,6 +36,7 @@ function Modal({ item, onClose, onSave }: {
         grupo: item?.grupo ?? "",
         observacao: item?.observacao ?? "",
         ativo: item?.ativo ?? true,
+        ano_desconhecido: item?.ano_desconhecido ?? false,
     })
     const [saving, setSaving] = useState(false)
 
@@ -68,8 +72,41 @@ function Modal({ item, onClose, onSave }: {
                 {/* Campos */}
                 {field("nome", "Nome completo")}
                 {field("telefone", "WhatsApp", "text", { placeholder: "5551999999999" }, soDigitos)}
-                {field("data_nasc", "Data de nascimento", "date")}
-                {field("grupo", "Grupo")}
+                {form.ano_desconhecido ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.05em" }}>ANIVERSÁRIO (DIA E MÊS)</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <select value={form.data_nasc ? Number(form.data_nasc.slice(8, 10)) : ""}
+                                onChange={e => setForm(f => ({ ...f, data_nasc: `2000-${(f.data_nasc || "2000-01-01").slice(5, 7)}-${String(e.target.value).padStart(2, "0")}` }))}
+                                style={{ flex: 1, background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px", color: "var(--text-primary)", fontSize: 13 }}>
+                                <option value="" disabled>Dia</option>
+                                {Array.from({ length: 31 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+                            </select>
+                            <select value={form.data_nasc ? Number(form.data_nasc.slice(5, 7)) : ""}
+                                onChange={e => setForm(f => ({ ...f, data_nasc: `2000-${String(e.target.value).padStart(2, "0")}-${(f.data_nasc || "2000-01-01").slice(8, 10)}` }))}
+                                style={{ flex: 2, background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px", color: "var(--text-primary)", fontSize: 13 }}>
+                                <option value="" disabled>Mês</option>
+                                {MESES_LONGOS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                ) : field("data_nasc", "Data de nascimento", "date")}
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)", cursor: "pointer", marginTop: -8 }}>
+                    <input type="checkbox" checked={form.ano_desconhecido}
+                        onChange={e => setForm(f => ({ ...f, ano_desconhecido: e.target.checked, data_nasc: f.data_nasc && e.target.checked ? `2000${f.data_nasc.slice(4)}` : f.data_nasc }))} />
+                    Não sei o ano (só dia e mês — a idade não aparece)
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.05em" }}>GRUPO</label>
+                    <select value={form.grupo} onChange={e => setForm(f => ({ ...f, grupo: e.target.value }))}
+                        style={{ background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px", color: "var(--text-primary)", fontSize: 13 }}>
+                        <option value="">Sem grupo</option>
+                        {[...GRUPOS, ...(form.grupo && !(GRUPOS as readonly string[]).includes(form.grupo) ? [form.grupo] : [])].map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    {form.grupo === "MEMBRO CRUZEIRO" && isNew && (
+                        <span style={{ fontSize: 11, color: "#d97706" }}>Membros vêm do cadastro da comunidade — quem não estiver lá sai na próxima sincronização.</span>
+                    )}
+                </div>
                 {field("observacao", "Observação")}
 
                 {/* Ativo toggle */}
@@ -219,6 +256,115 @@ function ModalSincronizar({ onClose, onAplicado }: { onClose: () => void; onApli
     )
 }
 
+// ─── Importar lista (CLIENTE, FAMÍLIA, AMIGOS) ─────────────────────────────────
+
+function ModalImportar({ onClose, onAplicado }: { onClose: () => void; onAplicado: (msg: string) => void }) {
+    const [texto, setTexto] = useState("")
+    const [grupo, setGrupo] = useState<string>(GRUPOS_IMPORTAVEIS[0])
+    const [plano, setPlano] = useState<PlanoImport | null>(null)
+    const [erro, setErro] = useState("")
+    const [ocupado, setOcupado] = useState(false)
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !ocupado) onClose() }
+        window.addEventListener("keydown", onKey)
+        return () => window.removeEventListener("keydown", onKey)
+    }, [onClose, ocupado])
+
+    async function enviar(aplicar: boolean) {
+        setOcupado(true); setErro("")
+        try {
+            const res = await fetch("/api/aniversariantes/importar", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ texto, grupo, aplicar }),
+            })
+            const data = await res.json()
+            if (!res.ok) { setErro(data.error || "Erro."); return }
+            if (aplicar) onAplicado(`Importados ${data.inseridos} aniversariantes no grupo ${grupo}.`)
+            else setPlano(data)
+        } catch { setErro("Falha de conexão. Tente de novo.") }
+        finally { setOcupado(false) }
+    }
+
+    async function lerArquivo(f: File | undefined) {
+        if (!f) return
+        setTexto(await f.text()); setPlano(null)
+    }
+
+    const fmt = (d: string, semAno: boolean) => semAno ? d.slice(5).split("-").reverse().join("/") : d.split("-").reverse().join("/")
+    const secao = (titulo: string, cor: string, itens: React.ReactNode[]) => itens.length === 0 ? null : (
+        <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: cor, marginBottom: 6 }}>{titulo} ({itens.length})</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>{itens}</div>
+        </div>
+    )
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 14, width: "100%", maxWidth: 640, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 15, fontWeight: 600 }}>Importar lista</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
+                        Uma pessoa por linha: <code>Nome; DD/MM/AAAA; telefone</code>. O ano e o telefone são opcionais (<code>Maria Souza; 15/03</code>).
+                        Também aceita CSV. Nada é gravado até clicar em Importar.
+                    </div>
+                </div>
+                <div style={{ padding: 20, overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <label style={{ fontSize: 12, color: "var(--text-muted)" }}>Grupo</label>
+                        <select value={grupo} onChange={e => { setGrupo(e.target.value); setPlano(null) }}
+                            style={{ background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 10px", color: "var(--text-primary)", fontSize: 13 }}>
+                            {GRUPOS_IMPORTAVEIS.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <label style={{ marginLeft: "auto", fontSize: 12, color: "#2563eb", cursor: "pointer" }}>
+                            Abrir arquivo CSV…
+                            <input type="file" accept=".csv,.txt,text/csv,text/plain" style={{ display: "none" }} onChange={e => lerArquivo(e.target.files?.[0])} />
+                        </label>
+                    </div>
+                    <textarea value={texto} onChange={e => { setTexto(e.target.value); setPlano(null) }} rows={8}
+                        placeholder={"Maria Souza; 15/03/1980; 51999999999\nJoão Pereira; 02/11"}
+                        style={{ background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text-primary)", fontSize: 12, fontFamily: "monospace", resize: "vertical" }} />
+                    {plano && <div>
+                        {plano.novos.length + plano.ja_na_lista.length + plano.erros.length === 0 && (
+                            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Nenhuma linha com conteúdo.</div>
+                        )}
+                        {secao(`Entram em ${grupo}`, "#16a34a", plano.novos.map(n => (
+                            <div key={n.linha}>
+                                {n.nome} · {fmt(n.data_nasc, n.ano_desconhecido)}{n.ano_desconhecido ? " (sem ano)" : ""} · {n.telefone ?? "sem telefone"}
+                                {n.avisos.map((a, i) => <div key={i} style={{ color: "#d97706", fontSize: 11, marginLeft: 10 }}>⚠ {a}</div>)}
+                            </div>
+                        )))}
+                        {secao("Já estão na lista (não mudam)", "#2563eb", plano.ja_na_lista.map(j => (
+                            <div key={j.linha}>Linha {j.linha}: {j.nome} · {j.grupo ?? "sem grupo"}</div>
+                        )))}
+                        {secao("Linhas com erro (ficam de fora)", "#dc2626", plano.erros.map(e => (
+                            <div key={e.linha}>Linha {e.linha}: {e.motivo} — <span style={{ color: "var(--text-muted)" }}>{e.texto}</span></div>
+                        )))}
+                    </div>}
+                    {erro && <div style={{ fontSize: 13, color: "#dc2626" }}>{erro}</div>}
+                </div>
+                <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button onClick={onClose} disabled={ocupado}
+                        style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text-primary)", fontSize: 13, cursor: "pointer" }}>
+                        Cancelar
+                    </button>
+                    {!plano ? (
+                        <button onClick={() => enviar(false)} disabled={ocupado || !texto.trim()}
+                            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: ocupado || !texto.trim() ? 0.6 : 1 }}>
+                            {ocupado ? "Conferindo…" : "Conferir"}
+                        </button>
+                    ) : plano.novos.length > 0 && (
+                        <button onClick={() => enviar(true)} disabled={ocupado}
+                            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", fontSize: 13, fontWeight: 600, cursor: ocupado ? "progress" : "pointer", opacity: ocupado ? 0.6 : 1 }}>
+                            {ocupado ? "Importando…" : `Importar ${plano.novos.length}`}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ─── Página principal ──────────────────────────────────────────────────────────
 
 export default function AniversariantesPage() {
@@ -230,10 +376,11 @@ export default function AniversariantesPage() {
     const [loading, setLoading] = useState(true)
     const [modal, setModal] = useState<Partial<Aniversariante> | null | false>(false)
     const [sincronizando, setSincronizando] = useState(false)
+    const [importando, setImportando] = useState(false)
     const [aviso, setAviso] = useState("")
 
     // ── grupos únicos para o select ──
-    const grupos = Array.from(new Set(lista.map(a => a.grupo).filter(Boolean) as string[])).sort()
+    const grupos = Array.from(new Set([...GRUPOS, ...(lista.map(a => a.grupo).filter(Boolean) as string[])]))
 
     // ── fetch ──────────────────────────────────────────────────────────────────
     const carregar = useCallback(async () => {
@@ -319,6 +466,12 @@ export default function AniversariantesPage() {
                         ⟳ Sincronizar com cadastro
                     </button>
                     <button
+                        onClick={() => setImportando(true)}
+                        title="Colar uma lista de clientes, família ou amigos"
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                        ⇪ Importar lista
+                    </button>
+                    <button
                         onClick={() => setModal({})}
                         style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                         + Adicionar
@@ -330,6 +483,12 @@ export default function AniversariantesPage() {
                     <span>{aviso}</span>
                     <button onClick={() => setAviso("")} style={{ border: "none", background: "transparent", color: "inherit", cursor: "pointer" }}>✕</button>
                 </div>
+            )}
+            {importando && (
+                <ModalImportar
+                    onClose={() => setImportando(false)}
+                    onAplicado={msg => { setImportando(false); setAviso(msg); carregar() }}
+                />
             )}
             {sincronizando && (
                 <ModalSincronizar
@@ -414,7 +573,7 @@ export default function AniversariantesPage() {
                                     {/* Data */}
                                     <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
                                         <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{a.dia_mes}</span>
-                                        <span style={{ marginLeft: 4 }}>({a.idade} anos)</span>
+                                        {a.idade != null && <span style={{ marginLeft: 4 }}>({a.idade} anos)</span>}
                                     </div>
 
                                     {/* Grupo */}
