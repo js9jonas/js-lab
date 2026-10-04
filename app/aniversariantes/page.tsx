@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { GRUPOS, GRUPOS_IMPORTAVEIS, type PlanoImport } from "@/lib/aniversariantesImport"
+import { GRUPOS, type PlanoImport } from "@/lib/aniversariantesImport"
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -256,11 +256,10 @@ function ModalSincronizar({ onClose, onAplicado }: { onClose: () => void; onApli
     )
 }
 
-// ─── Importar lista (CLIENTE, FAMÍLIA, AMIGOS) ─────────────────────────────────
+// ─── Importar lista (CLIENTE / AMIGO - FAMÍLIA, grupo automático) ──────────────
 
 function ModalImportar({ onClose, onAplicado }: { onClose: () => void; onAplicado: (msg: string) => void }) {
     const [texto, setTexto] = useState("")
-    const [grupo, setGrupo] = useState<string>(GRUPOS_IMPORTAVEIS[0])
     const [plano, setPlano] = useState<PlanoImport | null>(null)
     const [erro, setErro] = useState("")
     const [ocupado, setOcupado] = useState(false)
@@ -276,11 +275,11 @@ function ModalImportar({ onClose, onAplicado }: { onClose: () => void; onAplicad
         try {
             const res = await fetch("/api/aniversariantes/importar", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ texto, grupo, aplicar }),
+                body: JSON.stringify({ texto, aplicar }),
             })
             const data = await res.json()
             if (!res.ok) { setErro(data.error || "Erro."); return }
-            if (aplicar) onAplicado(`Importados ${data.inseridos} aniversariantes no grupo ${grupo}.`)
+            if (aplicar) onAplicado(`Importados ${data.inseridos} aniversariantes.`)
             else setPlano(data)
         } catch { setErro("Falha de conexão. Tente de novo.") }
         finally { setOcupado(false) }
@@ -306,16 +305,12 @@ function ModalImportar({ onClose, onAplicado }: { onClose: () => void; onAplicad
                     <div style={{ fontSize: 15, fontWeight: 600 }}>Importar lista</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
                         Uma pessoa por linha: <code>Nome; DD/MM/AAAA; telefone</code>. O ano e o telefone são opcionais (<code>Maria Souza; 15/03</code>).
-                        Também aceita CSV. Nada é gravado até clicar em Importar.
+                        Também aceita CSV. Grupo automático: telefone com assinatura ativa no js-painel vira CLIENTE, os demais AMIGO - FAMÍLIA.
+                        Nada é gravado até clicar em Importar.
                     </div>
                 </div>
                 <div style={{ padding: 20, overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <label style={{ fontSize: 12, color: "var(--text-muted)" }}>Grupo</label>
-                        <select value={grupo} onChange={e => { setGrupo(e.target.value); setPlano(null) }}
-                            style={{ background: "var(--bg-base)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 10px", color: "var(--text-primary)", fontSize: 13 }}>
-                            {GRUPOS_IMPORTAVEIS.map(g => <option key={g} value={g}>{g}</option>)}
-                        </select>
                         <label style={{ marginLeft: "auto", fontSize: 12, color: "#2563eb", cursor: "pointer" }}>
                             Abrir arquivo CSV…
                             <input type="file" accept=".csv,.txt,text/csv,text/plain" style={{ display: "none" }} onChange={e => lerArquivo(e.target.files?.[0])} />
@@ -328,9 +323,9 @@ function ModalImportar({ onClose, onAplicado }: { onClose: () => void; onAplicad
                         {plano.novos.length + plano.ja_na_lista.length + plano.erros.length === 0 && (
                             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Nenhuma linha com conteúdo.</div>
                         )}
-                        {secao(`Entram em ${grupo}`, "#16a34a", plano.novos.map(n => (
+                        {secao("Entram", "#16a34a", plano.novos.map(n => (
                             <div key={n.linha}>
-                                {n.nome} · {fmt(n.data_nasc, n.ano_desconhecido)}{n.ano_desconhecido ? " (sem ano)" : ""} · {n.telefone ?? "sem telefone"}
+                                {n.nome} · {fmt(n.data_nasc, n.ano_desconhecido)}{n.ano_desconhecido ? " (sem ano)" : ""} · {n.telefone ?? "sem telefone"} · <b>{n.grupo}</b>
                                 {n.avisos.map((a, i) => <div key={i} style={{ color: "#d97706", fontSize: 11, marginLeft: 10 }}>⚠ {a}</div>)}
                             </div>
                         )))}
